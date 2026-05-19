@@ -1,12 +1,15 @@
 """Couchbase repository for Asset."""
 
-from typing import Generic, List, Optional, Type
+from typing import Any, Generic, List, Optional, Type
 
 from ....application.repositories.asset_repository import AssetRepository, SomeAsset
 from ....domain.models.asset import Asset
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_asset import CBAsset
+from ._query_helpers import allowed_column, bucket_ident
 from .cb_base_repository import CBBaseRepository
+
+_ASSET_ORDER_COLUMNS = frozenset({"createdAt", "updatedAt", "week"})
 
 
 class CBAssetRepository(
@@ -29,23 +32,24 @@ class CBAssetRepository(
         kind: Optional[int] = None,
         week: Optional[int] = None,
         orderBy: str = "createdAt",
-        **kwargs,
     ) -> List[SomeAsset]:
-        b = self.repo.bucket
-        kind_filter = f"AND kind={kind}" if kind is not None else ""
-        week_filter = f"AND week={week}" if week is not None else ""
-        additional_filters = " ".join(
-            [f"AND {key}={value}" for key, value in kwargs.items()]
+        b = bucket_ident(self.repo.bucket)
+        order_col = allowed_column(orderBy, _ASSET_ORDER_COLUMNS)
+        clauses = ["type = $type", "studyId = $studyId"]
+        params: dict[str, Any] = {
+            "type": CBAsset.type,
+            "studyId": study_id,
+        }
+        if kind is not None:
+            clauses.append("kind = $kind")
+            params["kind"] = kind
+        if week is not None:
+            clauses.append("week = $week")
+            params["week"] = week
+        q = (
+            f"SELECT {b}.*, META().id, META().xattrs._sync.rev AS _rev "
+            f"FROM {b} "
+            f"WHERE {' AND '.join(clauses)} "
+            f"ORDER BY {order_col}"
         )
-        return self.get_by_query(
-            f"""
-            SELECT {b}.*, META().id, META().xattrs._sync.rev AS _rev
-            FROM {b}
-            WHERE type="{CBAsset.type}"
-            AND studyId="{study_id}"
-            {kind_filter}
-            {week_filter}
-            {additional_filters}
-            ORDER BY {orderBy}
-        """
-        )
+        return self.get_by_query(q, params)

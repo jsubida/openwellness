@@ -9,6 +9,7 @@ from ....application.repositories.daily_state_repository import (
 from ....domain.models.daily_state import DailyState
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_daily_state import CBDailyState
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 
@@ -33,17 +34,27 @@ class CBDailyStateRepository(
     def get_for_owner_between(
         self, owner_id: str, start: Arrow, end: Arrow
     ) -> list[SomeDailyState]:
-        q = self._build_get_between_query(owner_id, start, end)
-        items = self.repo.get_by_query(q)
+        q, params = self._build_get_between_query(owner_id, start, end)
+        items = self.repo.get_by_query(q, params)
         return [self.init_entity_valid_fields(item) for item in items]
 
-    def _build_get_between_query(self, owner_id: str, start: Arrow, end: Arrow) -> str:
+    def _build_get_between_query(
+        self, owner_id: str, start: Arrow, end: Arrow
+    ) -> tuple[str, dict]:
         ymd = "YYYY-MM-DD"
-        return f"""
-            SELECT {self.repo.bucket}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {self.repo.bucket}
-            WHERE type = "{CBDailyState.type}"
-                AND owner = "{owner_id}"
-                AND date BETWEEN "{start.format(ymd)}" AND "{end.format(ymd)}"
-            ORDER BY date, createdAt
-        """
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND date BETWEEN $start AND $end "
+            f"ORDER BY date, createdAt"
+        )
+        params = {
+            "type": CBDailyState.type,
+            "owner": owner_id,
+            "start": start.format(ymd),
+            "end": end.format(ymd),
+        }
+        return q, params

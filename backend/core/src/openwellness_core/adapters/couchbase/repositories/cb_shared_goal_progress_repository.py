@@ -7,6 +7,7 @@ from ....application.repositories.shared_goal_progress_repository import (
 from ....domain.models.shared_goal_progress import SharedGoalProgress
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_shared_goal_progress import CBSharedGoalProgress
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 
@@ -34,8 +35,8 @@ class CBSharedGoalProgressRepository(
         return self.entity_type(date=date, owner=owner, study_id=study_id)
 
     def get_for_owner(self, owner_id: str, arg: str) -> SomeSharedGoalProgress | None:
-        q = self._generate_query(owner_id, arg, arg)
-        items = self.repo.get_by_query(q)
+        q, params = self._generate_query(owner_id, arg, arg)
+        items = self.repo.get_by_query(q, params)
         if len(items) == 0:
             return None
         return self.init_entity_valid_fields(items[-1])
@@ -43,17 +44,26 @@ class CBSharedGoalProgressRepository(
     def get_for_owner_between(
         self, owner_id: str, start: str, end: str
     ) -> list[SomeSharedGoalProgress]:
-        q = self._generate_query(owner_id, start, end)
-        items = self.repo.get_by_query(q)
+        q, params = self._generate_query(owner_id, start, end)
+        items = self.repo.get_by_query(q, params)
         return [self.init_entity_valid_fields(item) for item in items]
 
-    def _generate_query(self, owner_id: str, start: str, end: str) -> str:
-        b = self.repo.bucket
-        return f"""
-            SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {b}
-            WHERE type="{CBSharedGoalProgress.type}"
-                AND owner='{owner_id}'
-                AND date BETWEEN '{start}' AND '{end}'
-            ORDER BY date, createdAt;
-        """
+    def _generate_query(
+        self, owner_id: str, start: str, end: str
+    ) -> tuple[str, dict]:
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND date BETWEEN $start AND $end "
+            f"ORDER BY date, createdAt;"
+        )
+        params = {
+            "type": CBSharedGoalProgress.type,
+            "owner": owner_id,
+            "start": start,
+            "end": end,
+        }
+        return q, params

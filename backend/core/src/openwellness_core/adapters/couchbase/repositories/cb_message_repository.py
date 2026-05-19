@@ -1,6 +1,6 @@
 """Couchbase repository for Message."""
 
-from typing import Generic, Type
+from typing import Any, Generic, Type
 
 from arrow import Arrow
 
@@ -11,6 +11,7 @@ from ....application.repositories.message_repository import (
 from ....domain.models.message import Message
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_conversation import CBMessage
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 
@@ -38,19 +39,31 @@ class CBMessageRepository(
         subtype: int | None = None,
         condition: int | None = None,
     ) -> list[SomeMessage]:
-        b = self.repo.bucket
-        q = f"""
-            SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {b}
-            WHERE type="{CBMessage.type}"
-            AND owner="{owner}"
-            AND createdAt BETWEEN {start.timestamp()} AND {end.timestamp()}
-        """
+        b = bucket_ident(self.repo.bucket)
+        clauses = [
+            "type = $type",
+            "owner = $owner",
+            "createdAt BETWEEN $start AND $end",
+        ]
+        params: dict[str, Any] = {
+            "type": CBMessage.type,
+            "owner": owner,
+            "start": start.timestamp(),
+            "end": end.timestamp(),
+        }
         if subtype is not None:
-            q += f" AND subtype={subtype}"
+            clauses.append("subtype = $subtype")
+            params["subtype"] = subtype
         if condition is not None:
-            q += f" AND condition={condition}"
-        q += " ORDER BY createdAt"
+            clauses.append("condition = $condition")
+            params["condition"] = condition
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE {' AND '.join(clauses)} "
+            f"ORDER BY createdAt"
+        )
         return [
-            self.init_entity_valid_fields(item) for item in self.repo.get_by_query(q)
+            self.init_entity_valid_fields(item)
+            for item in self.repo.get_by_query(q, params)
         ]

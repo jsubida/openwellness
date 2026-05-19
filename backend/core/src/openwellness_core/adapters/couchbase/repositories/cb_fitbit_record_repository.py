@@ -7,6 +7,7 @@ from ....application.repositories.fitbit_record_repository import FitbitRecordRe
 from ....domain.models.fitbit_record import FitbitRecord
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_fitbit import CBFitbitRecord
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 
@@ -50,15 +51,20 @@ class CBFitbitRecordRepository(
         return self.create(record)
 
     def get_for_owner(self, owner_id: str, arg: str) -> FitbitRecord | None:
-        b = self.repo.bucket
-        q = f"""
-            SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {b}
-            WHERE type = "{CBFitbitRecord.type}"
-                AND owner = "{owner_id}"
-                AND fitbitDate = "{arg}"
-        """
-        items = self.repo.get_by_query(q)
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND fitbitDate = $fitbitDate"
+        )
+        params = {
+            "type": CBFitbitRecord.type,
+            "owner": owner_id,
+            "fitbitDate": arg,
+        }
+        items = self.repo.get_by_query(q, params)
         if len(items) == 1:
             return self.init_entity_valid_fields(items[0])
         elif len(items) > 1:
@@ -70,19 +76,28 @@ class CBFitbitRecordRepository(
     def get_for_owner_between(
         self, owner_id: str, start: str, end: str
     ) -> list[FitbitRecord]:
-        q = self._generate_query(owner_id, start, end)
+        q, params = self._generate_query(owner_id, start, end)
         return [
-            self.init_entity_valid_fields(item) for item in self.repo.get_by_query(q)
+            self.init_entity_valid_fields(item)
+            for item in self.repo.get_by_query(q, params)
         ]
 
-    def _generate_query(self, owner: str, start: str, end: str) -> str:
-        b = self.repo.bucket
-        return f"""
-            SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {b}
-            WHERE type = "{CBFitbitRecord.type}"
-                AND fitbitDate BETWEEN "{start}" AND "{end}"
-                AND owner = "{owner}"
-            ORDER BY fitbitDate,
-                    createdAt DESC
-        """
+    def _generate_query(
+        self, owner: str, start: str, end: str
+    ) -> tuple[str, dict]:
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND fitbitDate BETWEEN $start AND $end "
+            f"AND owner = $owner "
+            f"ORDER BY fitbitDate, createdAt DESC"
+        )
+        params = {
+            "type": CBFitbitRecord.type,
+            "owner": owner,
+            "start": start,
+            "end": end,
+        }
+        return q, params

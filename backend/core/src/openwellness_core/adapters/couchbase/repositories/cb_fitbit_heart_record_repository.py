@@ -10,6 +10,7 @@ from ....application.repositories.fitbit_heart_record_repository import (
 from ....domain.models.fitbit_heart_record import FitbitHeartRecord
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_fitbit import CBFitbitHeartRecord
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 
@@ -40,8 +41,8 @@ class CBFitbitHeartRecordRepository(
         return self.update_entity_valid_fields(record, cleaned_data)
 
     def get_for_owner(self, owner_id: str, arg: str) -> SomeFitbitHeartRecord | None:
-        q = self._build_get_query(owner_id, arg)
-        items = self.repo.get_by_query(q)
+        q, params = self._build_get_query(owner_id, arg)
+        items = self.repo.get_by_query(q, params)
         if not items:
             return None
         if len(items) > 1:
@@ -52,8 +53,8 @@ class CBFitbitHeartRecordRepository(
     def get_for_owner_between(
         self, owner_id: str, start: str, end: str
     ) -> list[SomeFitbitHeartRecord]:
-        q = self._build_get_between_query(owner_id, start, end)
-        items = self.repo.get_by_query(q)
+        q, params = self._build_get_between_query(owner_id, start, end)
+        items = self.repo.get_by_query(q, params)
         heart_records = [self.init_entity_valid_fields(item) for item in items]
         date_records: DefaultDict[str, list[SomeFitbitHeartRecord]] = defaultdict(list)
         for record in heart_records:
@@ -66,25 +67,44 @@ class CBFitbitHeartRecordRepository(
                 deduplicated_records.append(records[0])
         return deduplicated_records
 
-    def _build_get_between_query(self, owner_id: str, start: str, end: str) -> str:
-        return f"""
-            SELECT {self.repo.bucket}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {self.repo.bucket}
-            WHERE type = "{CBFitbitHeartRecord.type}"
-                AND owner = "{owner_id}"
-                AND fitbitDate BETWEEN "{start}" AND "{end}"
-            ORDER BY fitbitDate, createdAt DESC
-        """
+    def _build_get_between_query(
+        self, owner_id: str, start: str, end: str
+    ) -> tuple[str, dict]:
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND fitbitDate BETWEEN $start AND $end "
+            f"ORDER BY fitbitDate, createdAt DESC"
+        )
+        params = {
+            "type": CBFitbitHeartRecord.type,
+            "owner": owner_id,
+            "start": start,
+            "end": end,
+        }
+        return q, params
 
-    def _build_get_query(self, owner_id: str, arg: str) -> str:
-        return f"""
-            SELECT {self.repo.bucket}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {self.repo.bucket}
-            WHERE type = "{CBFitbitHeartRecord.type}"
-                AND owner = "{owner_id}"
-                AND fitbitDate = "{arg}"
-            ORDER BY fitbitDate, createdAt DESC
-        """
+    def _build_get_query(
+        self, owner_id: str, arg: str
+    ) -> tuple[str, dict]:
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND fitbitDate = $fitbitDate "
+            f"ORDER BY fitbitDate, createdAt DESC"
+        )
+        params = {
+            "type": CBFitbitHeartRecord.type,
+            "owner": owner_id,
+            "fitbitDate": arg,
+        }
+        return q, params
 
     def _clean_data(self, data: dict) -> dict:
         hr_zones = [

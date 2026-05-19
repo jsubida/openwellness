@@ -19,6 +19,10 @@ class AssetRepository(BaseCrudRepository[SomeAsset, str]):
         kind: Optional[int] = None,
         week: Optional[int] = None,
         orderBy: str = "createdAt",
-        **kwargs,
     ) -> List[SomeAsset]:
-        """Fetch assets based on the provided criteria."""
+        """Fetch assets based on the provided criteria.
+
+        ``orderBy`` must be a column from the repository's allowlist; the
+        Couchbase implementation rejects unknown columns to prevent
+        identifier injection.
+        """

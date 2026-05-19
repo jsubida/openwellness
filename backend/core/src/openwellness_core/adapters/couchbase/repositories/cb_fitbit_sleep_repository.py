@@ -11,6 +11,7 @@ from ....application.repositories.fitbit_sleep_repository import (
 from ....domain.models.fitbit_sleep import FitbitSleep
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_fitbit import CBFitbitSleep
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 
@@ -50,8 +51,8 @@ class CBFitbitSleepRepository(
         return new_d
 
     def get_for_owner(self, owner_id: str, arg: Arrow) -> SomeFitbitSleep | None:
-        q = self._build_get_query(owner_id, arg)
-        items = self.repo.get_by_query(q)
+        q, params = self._build_get_query(owner_id, arg)
+        items = self.repo.get_by_query(q, params)
         if len(items) > 1:
             raise ValueError(
                 f"{len(items)} FitbitSleep found for owner {owner_id} on date {arg}"
@@ -61,26 +62,45 @@ class CBFitbitSleepRepository(
     def get_for_owner_between(
         self, owner_id: str, start: Arrow, end: Arrow
     ) -> list[SomeFitbitSleep]:
-        q = self._build_get_between_query(owner_id, start, end)
-        items = self.repo.get_by_query(q)
+        q, params = self._build_get_between_query(owner_id, start, end)
+        items = self.repo.get_by_query(q, params)
         return [self.init_entity_valid_fields(item) for item in items]
 
-    def _build_get_between_query(self, owner_id: str, start: Arrow, end: Arrow) -> str:
-        return f"""
-            SELECT {self.repo.bucket}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {self.repo.bucket}
-            WHERE type = "{CBFitbitSleep.type}"
-                AND owner = "{owner_id}"
-                AND fitbitDate BETWEEN "{start.format('YYYY-MM-DD')}" AND "{end.format('YYYY-MM-DD')}"
-            ORDER BY fitbitDate, createdAt DESC
-        """
+    def _build_get_between_query(
+        self, owner_id: str, start: Arrow, end: Arrow
+    ) -> tuple[str, dict]:
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND fitbitDate BETWEEN $start AND $end "
+            f"ORDER BY fitbitDate, createdAt DESC"
+        )
+        params = {
+            "type": CBFitbitSleep.type,
+            "owner": owner_id,
+            "start": start.format("YYYY-MM-DD"),
+            "end": end.format("YYYY-MM-DD"),
+        }
+        return q, params
 
-    def _build_get_query(self, owner_id: str, arg: Arrow) -> str:
-        return f"""
-            SELECT {self.repo.bucket}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {self.repo.bucket}
-            WHERE type = "{CBFitbitSleep.type}"
-                AND owner = "{owner_id}"
-                AND fitbitDate = "{arg.format('YYYY-MM-DD')}"
-            ORDER BY fitbitDate, createdAt DESC
-        """
+    def _build_get_query(
+        self, owner_id: str, arg: Arrow
+    ) -> tuple[str, dict]:
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND fitbitDate = $fitbitDate "
+            f"ORDER BY fitbitDate, createdAt DESC"
+        )
+        params = {
+            "type": CBFitbitSleep.type,
+            "owner": owner_id,
+            "fitbitDate": arg.format("YYYY-MM-DD"),
+        }
+        return q, params

@@ -8,6 +8,7 @@ from ....application.repositories.weight_repository import WeightRepository
 from ....domain.models.weight import Weight
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_weight import CBWeight
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 SomeWeight = TypeVar("SomeWeight", bound=Weight)
@@ -35,13 +36,19 @@ class CBWeightRepository(
     def get_for_owner_between(
         self, owner: str, start: Arrow, end: Arrow
     ) -> list[SomeWeight]:
-        b = self.repo.bucket
-        q = f"""
-            SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {b}
-            WHERE type="{CBWeight.type}"
-            AND owner="{owner}"
-            AND createdAt BETWEEN '{start.timestamp()}' AND '{end.timestamp()}'
-            ORDER BY createdAt ASC
-        """
-        return self.get_by_query(q)
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND createdAt BETWEEN $start AND $end "
+            f"ORDER BY createdAt ASC"
+        )
+        params = {
+            "type": CBWeight.type,
+            "owner": owner,
+            "start": start.timestamp(),
+            "end": end.timestamp(),
+        }
+        return self.get_by_query(q, params)

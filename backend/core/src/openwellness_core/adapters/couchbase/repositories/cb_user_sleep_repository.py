@@ -6,6 +6,7 @@ from ....application.repositories.user_sleep_repository import UserSleepReposito
 from ....domain.models.user_sleep import UserSleep
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_user import CBUserSleep
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 SomeUserSleep = TypeVar("SomeUserSleep", bound=UserSleep)
@@ -28,16 +29,22 @@ class CBUserSleepRepository(
     def get_user_sleeps_in_range(
         self, owner: str, start: str, end: str
     ) -> List[SomeUserSleep]:
-        b = self.repo.bucket
-        q = f"""
-            SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {b}
-            WHERE type="{CBUserSleep.type}"
-            AND owner="{owner}"
-            AND sleepDate BETWEEN '{start}' AND '{end}'
-            ORDER BY sleepDate, createdAt
-        """
-        return self.get_by_query(q)
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND sleepDate BETWEEN $start AND $end "
+            f"ORDER BY sleepDate, createdAt"
+        )
+        params = {
+            "type": CBUserSleep.type,
+            "owner": owner,
+            "start": start,
+            "end": end,
+        }
+        return self.get_by_query(q, params)
 
     def get_user_sleeps_for_date(self, owner: str, date: str) -> List[SomeUserSleep]:
         return self.get_user_sleeps_in_range(owner, date, date)

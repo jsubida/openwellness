@@ -90,9 +90,14 @@ class CBEntityRepository(EntityRepository):
             doc["id"] = doc.pop("_id")
         return doc
 
-    def get_by_query(self, query: str) -> list[dict]:
-        result = self.cluster.query(query)
-        return [row for row in result.rows()]
+    def get_by_query(
+        self, query: str, params: dict | None = None
+    ) -> list[dict]:
+        if params:
+            result = self.cluster.query(query, named_parameters=params)
+        else:
+            result = self.cluster.query(query)
+        return list(result.rows())
 
     def create(self, obj: dict) -> dict:
         url = f"{self.sync_gateway_url}/"
@@ -102,8 +107,10 @@ class CBEntityRepository(EntityRepository):
         content = response.json()
         return self._process_response(obj, content)
 
-    def execute_query(self, query: str) -> list[dict]:
-        return self.get_by_query(query)
+    def execute_query(
+        self, query: str, params: dict | None = None
+    ) -> list[dict]:
+        return self.get_by_query(query, params)
 
     def delete(self, doc_id: str) -> None:
         doc = self.get_by_id(doc_id)

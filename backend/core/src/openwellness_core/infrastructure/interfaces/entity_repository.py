@@ -17,8 +17,15 @@ class EntityRepository(ABC):
         """Fetch an object of type dict by its ID."""
 
     @abstractmethod
-    def get_by_query(self, query: str) -> list[dict]:
-        """Fetch objects of type dict via N1QL query."""
+    def get_by_query(
+        self, query: str, params: dict | None = None
+    ) -> list[dict]:
+        """Fetch objects of type dict via N1QL query.
+
+        All user-supplied values must be passed via ``params`` (named
+        parameters: ``$name`` in ``query``). Only the bucket name and
+        allowlisted column identifiers may be interpolated into ``query``.
+        """
 
     @abstractmethod
     def create(self, obj: dict) -> dict:

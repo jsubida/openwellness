@@ -9,6 +9,7 @@ from ....application.repositories.fitbit_weight_repository import (
 from ....domain.models.fitbit_weight import FitbitWeight
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_fitbit import CBFitbitWeight
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 
@@ -31,15 +32,22 @@ class CBFitbitWeightRepository(
     def get_for_owner_between(
         self, owner: str, start: str, end: str
     ) -> list[SomeFitbitWeight]:
-        b = self.repo.bucket
-        q = f"""
-            SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev
-            FROM {b}
-            WHERE type = "{CBFitbitWeight.type}"
-                AND owner = "{owner}"
-                AND fitbitDate BETWEEN "{start}" AND "{end}"
-                ORDER BY createdAt ASC
-        """
+        b = bucket_ident(self.repo.bucket)
+        q = (
+            f"SELECT {b}.*, meta().id, meta().xattrs._sync.rev as _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND fitbitDate BETWEEN $start AND $end "
+            f"ORDER BY createdAt ASC"
+        )
+        params = {
+            "type": CBFitbitWeight.type,
+            "owner": owner,
+            "start": start,
+            "end": end,
+        }
         return [
-            self.init_entity_valid_fields(item) for item in self.repo.get_by_query(q)
+            self.init_entity_valid_fields(item)
+            for item in self.repo.get_by_query(q, params)
         ]

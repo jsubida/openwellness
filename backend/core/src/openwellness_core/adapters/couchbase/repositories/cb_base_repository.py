@@ -37,15 +37,29 @@ class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
         result = self.repo.create(self._to_doc(entity))
         return self._from_doc(result)
 
-    def execute_query(self, query: str) -> Any:
-        return self.repo.get_by_query(query)
+    def execute_query(self, query: str, params: dict | None = None) -> Any:
+        """Execute a N1QL query and return raw dict rows.
+
+        All user-supplied values must be passed via ``params`` (named
+        parameters: ``$name`` in ``query``). Only the bucket name and
+        allowlisted column identifiers may be interpolated into ``query``.
+        """
+        return self.repo.get_by_query(query, params)
 
     def get_by_id(self, entity_id: str) -> Entity | None:
         result = self.repo.get_by_id(entity_id)
         return self._from_doc(result) if result else None
 
-    def get_by_query(self, query: str) -> list[Entity]:
-        return [self._from_doc(item) for item in self.execute_query(query)]
+    def get_by_query(
+        self, query: str, params: dict | None = None
+    ) -> list[Entity]:
+        """Execute a N1QL query and rehydrate domain entities from the rows.
+
+        See :meth:`execute_query` for the parameterization contract.
+        """
+        return [
+            self._from_doc(item) for item in self.execute_query(query, params)
+        ]
 
     def init_entity_valid_fields(self, data: dict) -> Entity:
         """Create an entity from a wire-format dict (e.g., raw N1QL rows)."""

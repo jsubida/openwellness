@@ -1,9 +1,12 @@
 """Couchbase repository for Post."""
 
+from typing import Any
+
 from ....application.repositories.post_repository import PostRepository, SomePost
 from ....domain.models.post import Post
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_post import CBPost
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 
@@ -26,8 +29,8 @@ class CBPostRepository(PostRepository, CBBaseRepository[SomePost, CBPost]):
         end: float = 999999999999.9,
         conversation_id: str | None = None,
     ) -> list[SomePost]:
-        q = self._build_query(channel, start, end, conversation_id)
-        items = self.repo.get_by_query(q)
+        q, params = self._build_query(channel, start, end, conversation_id)
+        items = self.repo.get_by_query(q, params)
         return [self.init_entity_valid_fields(item) for item in items]
 
     def _build_query(
@@ -36,19 +39,28 @@ class CBPostRepository(PostRepository, CBBaseRepository[SomePost, CBPost]):
         start: float,
         end: float,
         conversation_id: str | None,
-    ) -> str:
-        q = f"""
-        SELECT {self.repo.bucket}.*, META().id, META().xattrs._sync.rev AS _rev
-        FROM {self.repo.bucket}
-        USE KEYS (SELECT RAW META().id
-            FROM {self.repo.bucket}
-            WHERE type="{CBPost.type}"
-            AND '{channel}' IN channels
-            AND createdAt BETWEEN {start} AND {end}
-        """
+    ) -> tuple[str, dict[str, Any]]:
+        b = bucket_ident(self.repo.bucket)
+        clauses = [
+            "type = $type",
+            "$channel IN channels",
+            "createdAt BETWEEN $start AND $end",
+        ]
+        params: dict[str, Any] = {
+            "type": CBPost.type,
+            "channel": channel,
+            "start": start,
+            "end": end,
+        }
         if conversation_id is not None:
-            q += f"""AND conversationId='{conversation_id}'
-            ORDER BY createdAt);"""
-        else:
-            q += "ORDER BY createdAt);"
-        return q
+            clauses.append("conversationId = $conversationId")
+            params["conversationId"] = conversation_id
+        q = (
+            f"SELECT {b}.*, META().id, META().xattrs._sync.rev AS _rev "
+            f"FROM {b} "
+            f"USE KEYS (SELECT RAW META().id "
+            f"FROM {b} "
+            f"WHERE {' AND '.join(clauses)} "
+            f"ORDER BY createdAt);"
+        )
+        return q, params

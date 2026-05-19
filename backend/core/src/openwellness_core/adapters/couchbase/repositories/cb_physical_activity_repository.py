@@ -10,6 +10,7 @@ from ....application.repositories.physical_activity_repository import (
 from ....domain.models.physical_activity import PhysicalActivity
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_physical_activity import CBPhysicalActivity
+from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
 
 
@@ -29,18 +30,23 @@ class CBPhysicalActivityRepository(
     def fetch_all_in_range(
         self, owner: str, start: float, end: float, descending: bool = False
     ) -> List[PhysicalActivity]:
-        b = self.repo.bucket
-        is_descending = "DESC" if descending else ""
-        return self.get_by_query(
-            f"""
-            SELECT {b}.*, META().id, META().xattrs._sync.rev AS _rev
-            FROM {b}
-            WHERE type="{CBPhysicalActivity.type}"
-            AND owner='{owner}'
-            AND dateOfActivity BETWEEN {start} AND {end}
-            ORDER BY dateOfActivity {is_descending}, createdAt {is_descending}
-        """
+        b = bucket_ident(self.repo.bucket)
+        order_dir = "DESC" if descending else "ASC"
+        q = (
+            f"SELECT {b}.*, META().id, META().xattrs._sync.rev AS _rev "
+            f"FROM {b} "
+            f"WHERE type = $type "
+            f"AND owner = $owner "
+            f"AND dateOfActivity BETWEEN $start AND $end "
+            f"ORDER BY dateOfActivity {order_dir}, createdAt {order_dir}"
         )
+        params = {
+            "type": CBPhysicalActivity.type,
+            "owner": owner,
+            "start": start,
+            "end": end,
+        }
+        return self.get_by_query(q, params)
 
     def fetch_for_week_of_date(self, owner: str, date: float) -> List[PhysicalActivity]:
         arrow_date = arrow.get(date).to("local")

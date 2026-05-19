@@ -37,16 +37,23 @@ class Conversation(BaseOwnerEntity):
             self.type = type
             self.val = val
 
-        def n1ql(self) -> str:
+        def to_n1ql(self, idx: int) -> tuple[str, dict[str, Any]]:
+            """Return a parameterized clause + params for this filter.
+
+            ``idx`` is appended to the parameter names so a query that
+            stacks several filters of the same type doesn't collide.
+            """
             if self.type == Conversation.Filter.Type.CHANNELS:
-                channel_list = '","'.join(self.val)
-                return f'ANY c in channels SATISFIES c IN ["{channel_list}"] END'
-            elif self.type == Conversation.Filter.Type.KIND:
-                return f"kind={str(self.val)} "
-            elif self.type == Conversation.Filter.Type.WEEK:
-                return f"week={str(self.val)} "
-            else:
-                return ""
+                key = f"channels_{idx}"
+                clause = f"ANY c IN channels SATISFIES c IN ${key} END"
+                return clause, {key: list(self.val)}
+            if self.type == Conversation.Filter.Type.KIND:
+                key = f"kind_{idx}"
+                return f"kind = ${key}", {key: int(self.val)}
+            if self.type == Conversation.Filter.Type.WEEK:
+                key = f"week_{idx}"
+                return f"week = ${key}", {key: int(self.val)}
+            return "", {}
 
     kind: int
     title: str | None = field(default=None)
