@@ -27,6 +27,10 @@ class BaseCrudRepository(ABC, Generic[Entity, Query]):
         """Get entities by a query."""
 
     @abstractmethod
+    def list_all(self) -> list[Entity]:
+        """List all entities of this repository's type."""
+
+    @abstractmethod
     def save(self, entity: Entity) -> Entity:
         """Save an entity."""
 
@@ -40,4 +44,13 @@ class BaseCrudRepository(ABC, Generic[Entity, Query]):
 
         Implementations copy the existing entity into an archive slot
         (collection or type-discriminator) before any retention/deletion logic.
+        """
+
+    @abstractmethod
+    def unarchive(self, entity_id: str) -> None:
+        """Restore an archived entity by its ID.
+
+        Inverse of :meth:`archive`: removes the archive-slot copy so the
+        original document is the canonical record again. A no-op (not an
+        error) when no archive copy exists.
         """

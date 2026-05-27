@@ -71,6 +71,9 @@ class MongoBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
     def get_by_query(self, query: dict) -> list[Entity]:
         return [self._from_doc(item) for item in self.execute_query(query)]
 
+    def list_all(self) -> list[Entity]:
+        return self.get_by_query({})
+
     def init_entity_valid_fields(self, data: dict) -> Entity:
         return self._from_doc(data)
 
@@ -99,3 +102,18 @@ class MongoBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
             raise EntityNotFoundException(f"Entity {entity_id} not found")
         archive_collection_name = f"{self._collection_name}_archive"
         self.repo[archive_collection_name].insert_one(self._to_doc(entity))
+
+    def unarchive(self, entity_id: str) -> None:
+        """Drop archive copies of an entity from ``{collection}_archive``.
+
+        Inverse of :meth:`archive`: deletes archive-collection rows that
+        share the original ``_id``. The original collection's document is
+        untouched. No-op when no archive row exists.
+        """
+        archive_collection_name = f"{self._collection_name}_archive"
+        try:
+            self.repo[archive_collection_name].delete_many(
+                {"_id": ObjectId(entity_id)}
+            )
+        except Exception:  # pragma: no cover - defensive
+            return
