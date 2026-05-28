@@ -22,7 +22,7 @@ class Study(ResourceBase):
     display_name: str = ""
     time_created: datetime | None = None
     description: str | None = None
-    end_intervention_week: int = 99999
+    end_intervention_week: int | None = 99999
     time_updated: datetime | None = None
     updated_by: str | None = None
 

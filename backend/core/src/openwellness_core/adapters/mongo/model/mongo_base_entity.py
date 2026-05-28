@@ -11,9 +11,27 @@ model carries a plain string id.
 from typing import Any, ClassVar, Type, TypeVar
 
 from bson import ObjectId
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 E = TypeVar("E")
+
+
+def _coerce_objectids(value: Any) -> Any:
+    """Recursively replace any ObjectId with its string form."""
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _coerce_objectids(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_coerce_objectids(v) for v in value]
+    return value
 
 
 class MongoBaseEntity(BaseModel):
@@ -28,6 +46,13 @@ class MongoBaseEntity(BaseModel):
     collection: ClassVar[str] = ""
 
     id: str = Field(default="", alias="_id")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _stringify_objectid_fields(cls, data: Any) -> Any:
+        # Reference fields (participant_id, owner, study_id, ...) come back
+        # from Mongo as ObjectId; the domain and the API expect plain str.
+        return _coerce_objectids(data)
 
     @field_validator("id", mode="before")
     @classmethod

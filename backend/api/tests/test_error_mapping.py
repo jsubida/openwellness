@@ -40,6 +40,19 @@ def trip_app() -> FastAPI:
     def _db() -> None:
         raise DomainException("boom")
 
+    @app.get("/raise/validation-objectid")
+    def _voi() -> None:
+        from bson import ObjectId
+        from pydantic import BaseModel, ValidationError
+
+        class _M(BaseModel):
+            x: str
+
+        try:
+            _M(x=ObjectId())  # type: ignore[arg-type]
+        except ValidationError as e:
+            raise e
+
     return app
 
 
@@ -77,3 +90,13 @@ def test_domain_base_maps_to_500(trip_app: FastAPI) -> None:
     r = client.get("/raise/domain-base")
     assert r.status_code == 500
     assert r.json()["error"]["status"] == "INTERNAL"
+
+
+def test_validation_error_with_objectid_input_maps_to_400(trip_app: FastAPI) -> None:
+    """A ValidationError whose `input` is a non-JSON type (ObjectId) must
+    still render a clean 400, not crash the response with a TypeError.
+    """
+    client = TestClient(trip_app, raise_server_exceptions=False)
+    r = client.get("/raise/validation-objectid")
+    assert r.status_code == 400
+    assert r.json()["error"]["status"] == "INVALID_ARGUMENT"

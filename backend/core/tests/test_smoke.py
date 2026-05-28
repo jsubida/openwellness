@@ -50,6 +50,21 @@ def test_base_entity_defaults_have_id():
     assert e.id, "BaseEntity should default `id` to a non-empty value"
 
 
+def test_mongo_stringifies_reference_objectids():
+    """Adapter boundary stringifies *all* ObjectId fields, not just `_id`,
+    so the domain (and the API str contract) never sees a raw ObjectId.
+    """
+    from openwellness_core.adapters.mongo.model.mongo_device import MongoDevice
+    from openwellness_core.domain.models.device import Device
+
+    pid = ObjectId()
+    doc = {"_id": ObjectId(), "serialNumber": "SN1", "participantId": pid}
+    dev = MongoDevice.model_validate(doc).to_domain(Device)
+
+    assert isinstance(dev.participant_id, str)
+    assert dev.participant_id == str(pid)
+
+
 def test_base_owner_entity_audit_defaults():
     e = BaseOwnerEntity(owner="p1", study_id="s1")
     assert e.owner == "p1"

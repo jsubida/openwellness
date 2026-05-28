@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from pydantic_core import to_jsonable_python
 
 from openwellness_core.application.exceptions import LimitExceededException
 from openwellness_core.domain.exceptions.domain_exception import (
@@ -18,6 +19,17 @@ from openwellness_core.domain.exceptions.domain_exception import (
 from .responses import build_error
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_errors(exc: ValidationError | RequestValidationError) -> list:
+    """JSON-safe error details.
+
+    A validation error's ``input`` can be a non-JSON-native value (e.g. a
+    ``bson.ObjectId`` from a response-serialization failure); serialize it
+    safely so the handler returns a clean 400 instead of crashing while
+    rendering the response.
+    """
+    return to_jsonable_python(exc.errors(), serialize_unknown=True)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -81,7 +93,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=400,
             content=build_error(
-                400, "INVALID_ARGUMENT", "Validation failed", details=list(exc.errors())
+                400, "INVALID_ARGUMENT", "Validation failed", details=_safe_errors(exc)
             ),
         )
 
@@ -92,7 +104,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=400,
             content=build_error(
-                400, "INVALID_ARGUMENT", "Validation failed", details=list(exc.errors())
+                400, "INVALID_ARGUMENT", "Validation failed", details=_safe_errors(exc)
             ),
         )
 
