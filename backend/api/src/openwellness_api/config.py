@@ -107,7 +107,7 @@ class AuthSettings(BaseSettings):
     # OTP
     otp_ttl_seconds: int = 600
     otp_length: int = 6
-    otp_max_attempts: int = 5
+    otp_max_attempts: int = Field(default=5, ge=1)
     # Rate limits
     send_window_seconds: int = 3600
     send_max_per_window: int = 5
