@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Callable, cast
+from typing import Any, Callable, cast
 
 import fakeredis
 import pytest
 
+import redis.client
 import redis.exceptions
 
 from openwellness_core.application.exceptions import LimitExceededException
@@ -471,7 +472,7 @@ def test_verify_retry_exhaustion_raises_invalid() -> None:
     class _AlwaysWatchErrorPipe:
         """Wraps a real pipeline but forces EXEC to always raise WatchError."""
 
-        def __init__(self, inner: object) -> None:
+        def __init__(self, inner: redis.client.Pipeline) -> None:
             self._inner = inner
 
         def execute(self) -> object:
@@ -488,7 +489,7 @@ def test_verify_retry_exhaustion_raises_invalid() -> None:
         def __exit__(self, *args: object) -> object:
             return self._inner.__exit__(*args)
 
-    def patched_pipeline(*args: object, **kwargs: object) -> object:
+    def patched_pipeline(*args: Any, **kwargs: Any) -> object:
         return _AlwaysWatchErrorPipe(real_pipeline(*args, **kwargs))
 
     client.pipeline = patched_pipeline  # type: ignore[method-assign]

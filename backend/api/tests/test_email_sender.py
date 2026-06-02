@@ -153,21 +153,21 @@ class TestSmtpEmailSenderMessage:
     def test_body_contains_expiry_when_ttl_given(self) -> None:
         with patch("smtplib.SMTP") as mock_smtp_cls:
             msg = self._send(mock_smtp_cls, ttl_seconds=600)
-        body = msg.get_payload()
+        body = str(msg.get_payload())
         # 600s must render deterministically as "10 minutes"
         assert "expires in 10 minutes" in body.lower()
 
     def test_body_does_not_mention_expiry_when_ttl_absent(self) -> None:
         with patch("smtplib.SMTP") as mock_smtp_cls:
             msg = self._send(mock_smtp_cls, ttl_seconds=None)
-        body = msg.get_payload()
+        body = str(msg.get_payload())
         # Without ttl there must be NO expiry line (guards the conditional branch)
         assert "expires" not in body.lower()
 
     def test_registration_purpose_affects_body(self) -> None:
         with patch("smtplib.SMTP") as mock_smtp_cls:
             msg = self._send(mock_smtp_cls, purpose="registration")
-        body = msg.get_payload()
+        body = str(msg.get_payload())
         # Body must include the code AND be phrased for registration
         assert "654321" in body
         assert "registration" in body.lower()

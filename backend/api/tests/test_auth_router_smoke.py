@@ -9,7 +9,7 @@ lockouts, refresh reuse, etc.) is a later task — this only validates the wirin
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import redis.exceptions
 from dependency_injector import providers
@@ -104,7 +104,7 @@ def test_redis_down_returns_503(client: TestClient) -> None:
     """A runtime Redis outage maps to a clean AIP-193 503 (UNAVAILABLE)."""
     # Override the live auth container's otp_store BEFORE the request so the
     # per-request ``auth_service_dep`` assembles the service with the dead store.
-    client.app.state.auth_container.otp_store.override(
+    cast(FastAPI, client.app).state.auth_container.otp_store.override(
         providers.Object(_DeadRedisOtpStore())
     )
     try:
@@ -112,7 +112,7 @@ def test_redis_down_returns_503(client: TestClient) -> None:
             "/v1/auth:sendLoginCode", json={"email": "x@example.com"}
         )
     finally:
-        client.app.state.auth_container.otp_store.reset_override()
+        cast(FastAPI, client.app).state.auth_container.otp_store.reset_override()
 
     assert resp.status_code == 503, resp.text
     body = resp.json()
