@@ -14,6 +14,10 @@ from uuid import uuid4
 # Ensure config loads with safe defaults before the app imports.
 os.environ.setdefault("COUCHBASE_URL", "couchbase://stub")
 os.environ.setdefault("MONGO_URL", "mongodb://stub")
+# Safe ≥32-char auth secrets so any accidental real-lifespan import (boot guard)
+# passes; the test app fixture builds its own AuthContainer regardless.
+os.environ.setdefault("API_AUTH_JWT_SECRET", "test-secret-" * 4)
+os.environ.setdefault("API_AUTH_CODE_PEPPER", "test-pepper-" * 4)
 
 import pytest
 from dependency_injector import providers
@@ -34,6 +38,8 @@ from openwellness_core.domain.exceptions.domain_exception import (
     EntityNotFoundException,
 )
 from openwellness_core.domain.models.conversation import Conversation
+from openwellness_core.domain.models.participant import Participant
+from openwellness_core.domain.models.user import User
 
 
 class InMemoryBaseRepo:
@@ -98,7 +104,22 @@ class InMemoryOwnerRepo(InMemoryBaseRepo):
 
 
 class FakeUserRepo(InMemoryBaseRepo, UserRepository):
-    pass
+    def get_by_query(self, query: Any) -> list[Any]:
+        """Honor an ``{"email": ...}`` filter (the auth service relies on it).
+
+        The base in-memory ``get_by_query`` returns ALL users, which would make
+        the login-eligibility lookup (``get_by_query({"email": norm})`` must
+        return only the matching user) wrong. An empty/falsy query still returns
+        everything, preserving the existing CRUD-test behavior.
+        """
+        if isinstance(query, dict) and "email" in query:
+            wanted = query["email"]
+            return [
+                u
+                for u in self.store.values()
+                if getattr(u, "email", None) == wanted
+            ]
+        return list(self.store.values())
 
 
 class FakeStudyRepo(InMemoryBaseRepo, StudyRepository):
@@ -240,14 +261,37 @@ _WIRED_MODULES = [mod.__name__ for mod in RESOURCE_MODULES]
 
 
 @pytest.fixture
-def app(fakes: dict[type, Any]):
+def fake_email_sender():
+    """Function-scoped in-memory OTP email recorder.
+
+    The same instance is attached to the ``app`` fixture's auth container, so a
+    test can read ``fake_email_sender.sent`` / ``last_code(...)`` to recover a
+    code that the send path delivered.
+    """
+    from openwellness_api.auth.email_sender import FakeEmailSender
+
+    return FakeEmailSender()
+
+
+@pytest.fixture
+def app(fakes: dict[type, Any], fake_email_sender):
     """App with fakes wired through an ``ApplicationContainer`` instance.
 
     We bypass the real lifespan (no Couchbase/Mongo connection), build a
     container, override each fake's provider with ``providers.Object(fake)``,
-    and wire the resource modules so ``@inject`` markers see the overrides.
+    and wire the resource modules so ``@inject`` markers see the overrides. An
+    ``AuthContainer`` is also built and attached with real collaborators backed
+    by fakeredis/mongomock + a real clock, so the auth router works end-to-end.
     """
+    import fakeredis
+    import mongomock
+
+    from openwellness_api.auth.otp_store import RedisOtpStore
+    from openwellness_api.auth.session_store import RefreshSessionStore
+    from openwellness_api.auth.token_service import JwtTokenService
+    from openwellness_api.config import AuthSettings
     from openwellness_api.container import ApplicationContainer
+    from openwellness_api.deps.auth_container import AuthContainer, default_clock
     from openwellness_api.errors.handlers import register_exception_handlers
     from openwellness_api.v1 import build_v1_router
 
@@ -264,9 +308,102 @@ def app(fakes: dict[type, Any]):
     container.wire(modules=_WIRED_MODULES)
     instance.state.container = container
 
+    # --- Auth container with test fakes (function-scoped → isolated). --- #
+    # One shared AuthSettings instance so token_service/otp_store agree on the
+    # secrets/TTLs. The real clock keeps issued access tokens valid (PyJWT
+    # validates ``exp`` against wall-clock time).
+    auth_settings = AuthSettings()
+    auth_container = AuthContainer()
+    auth_container.auth_settings.override(providers.Object(auth_settings))
+    auth_container.token_service.override(
+        providers.Object(
+            JwtTokenService(settings=auth_settings, clock=default_clock)
+        )
+    )
+    auth_container.otp_store.override(
+        providers.Object(
+            RedisOtpStore(
+                redis=fakeredis.FakeRedis(decode_responses=True),
+                settings=auth_settings,
+                clock=default_clock,
+            )
+        )
+    )
+    session_store = RefreshSessionStore(
+        collection=mongomock.MongoClient()["testdb"]["auth_refresh_sessions"],
+        clock=default_clock,
+    )
+    session_store.ensure_indexes()
+    auth_container.session_store.override(providers.Object(session_store))
+    auth_container.email_sender.override(providers.Object(fake_email_sender))
+    instance.state.auth_container = auth_container
+
     yield instance
 
     container.unwire()
+
+
+@pytest.fixture
+def seed_accounts(fakes: dict[type, Any]) -> dict[str, Any]:
+    """Opt-in seed of pre-provisioned auth accounts into the fake repos.
+
+    NOT applied by default — only tests that request this fixture get the seeded
+    accounts, so existing CRUD tests (which assert on user lists) are unaffected.
+
+    Seeds:
+      * a VERIFIED, login-ready user (alice) + matching participant, and
+      * an UNVERIFIED registration target (bob) + matching participant.
+    """
+    user_repo = fakes[UserRepository]
+    participant_repo = fakes[ParticipantRepository]
+
+    login_user_id = str(uuid4())
+    pid_a = str(uuid4())
+    alice = User(
+        id=login_user_id,
+        email="alice@example.com",
+        is_active=True,
+        username="alice",
+        verified_id="marker",
+        roles={"participant": {"pid": pid_a}},
+    )
+    participant_a = Participant(
+        id=pid_a,
+        user_id=login_user_id,
+        is_active=True,
+        participant_number="A-1",
+    )
+
+    reg_user_id = str(uuid4())
+    pid_b = str(uuid4())
+    bob = User(
+        id=reg_user_id,
+        email="bob@example.com",
+        is_active=True,
+        username="bob",
+        verified_id=None,
+        roles={"participant": {"pid": pid_b}},
+    )
+    participant_b = Participant(
+        id=pid_b,
+        user_id=reg_user_id,
+        is_active=False,
+        participant_number="B-1",
+    )
+
+    user_repo.store[alice.id] = alice
+    user_repo.store[bob.id] = bob
+    participant_repo.store[participant_a.id] = participant_a
+    participant_repo.store[participant_b.id] = participant_b
+
+    return {
+        "login_email": "alice@example.com",
+        "login_user_id": login_user_id,
+        "login_pid": pid_a,
+        "reg_email": "bob@example.com",
+        "reg_user_id": reg_user_id,
+        "reg_pid": pid_b,
+    }
 
 
 @pytest.fixture
