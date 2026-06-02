@@ -68,3 +68,54 @@ class APISettings(BaseSettings):
     default_page_size: int = Field(default=50, ge=1, le=1000)
     max_page_size: int = Field(default=1000, ge=1, le=10000)
     time_range_max_span_days: int = 7
+
+
+class RedisSettings(BaseSettings):
+    """Redis connection settings (used for OTP / rate-limit caching)."""
+
+    model_config = SettingsConfigDict(env_prefix="REDIS_", extra="ignore")
+
+    url: str = "redis://localhost:6379/0"
+
+
+class SmtpSettings(BaseSettings):
+    """Outbound SMTP settings for email delivery."""
+
+    model_config = SettingsConfigDict(env_prefix="SMTP_", extra="ignore")
+
+    host: str = ""
+    port: int = Field(default=587, ge=1, le=65535)
+    username: str = ""
+    password: str = ""
+    use_tls: bool = True
+    from_address: str = ""
+
+
+class AuthSettings(BaseSettings):
+    """Authentication knobs: JWT, OTP, rate limits, and misc behaviour flags."""
+
+    model_config = SettingsConfigDict(env_prefix="API_AUTH_", extra="ignore")
+
+    # JWT
+    jwt_secret: str = ""
+    jwt_alg: str = "HS256"
+    jwt_issuer: str = "openwellness-api"
+    jwt_audience: str = "openwellness-api"
+    access_ttl_seconds: int = 900
+    refresh_ttl_seconds: int = 2592000
+    jwt_leeway_seconds: int = 30
+    # OTP
+    otp_ttl_seconds: int = 600
+    otp_length: int = 6
+    otp_max_attempts: int = 5
+    # Rate limits
+    send_window_seconds: int = 3600
+    send_max_per_window: int = 5
+    resend_cooldown_seconds: int = 60
+    ip_window_seconds: int = 3600
+    ip_max_per_window: int = 20
+    # Behaviour
+    enforce_principal: bool = False
+    refresh_collection: str = "auth_refresh_sessions"
+    code_pepper: str = ""
+    legacy_verified_id_salt: str | None = None
