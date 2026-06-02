@@ -146,6 +146,41 @@ def test_registration_happy_path(
     assert bob.is_active is True
 
 
+def test_register_then_login_composes(
+    client: TestClient,
+    app: FastAPI,
+    seed_accounts: dict[str, Any],
+    fake_email_sender: Any,
+) -> None:
+    """A freshly-registered user can immediately log in (the two flows compose:
+    registration sets email + verified_id + is_active, which is exactly login's
+    eligibility predicate)."""
+    email = seed_accounts["reg_email"]
+    pid = seed_accounts["reg_pid"]
+
+    # 1) Register.
+    send = client.post(
+        "/v1/auth:sendRegistrationCode",
+        json={"email": email, "participant": f"participants/{pid}"},
+    )
+    assert send.status_code == 200, send.text
+    reg_code = fake_email_sender.last_code(email, "registration")
+    assert reg_code is not None
+    reg = client.post(
+        "/v1/auth:verifyRegistrationCode", json={"email": email, "code": reg_code}
+    )
+    assert reg.status_code == 200, reg.text
+
+    # 2) Now log in as the just-registered user (purpose-scoped rate-limit keys
+    # mean the prior registration send doesn't trip the login cooldown).
+    login_body = _login(client, fake_email_sender, email)
+    assert login_body["accessToken"]
+    assert login_body["refreshToken"]
+    assert login_body["principal"]["userId"] == seed_accounts["reg_user_id"]
+    claims = _token_service(app).verify_access(login_body["accessToken"])
+    assert claims.sub == seed_accounts["reg_user_id"]
+
+
 # --------------------------------------------------------------------------- #
 # 3. Registration accepts a bare pid and the ``pid`` alias
 # --------------------------------------------------------------------------- #
