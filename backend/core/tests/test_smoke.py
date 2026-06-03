@@ -6,7 +6,6 @@ core domain fields intact.
 """
 
 from bson import ObjectId
-
 from openwellness_core.adapters.couchbase.model import (
     CBBaseOwnerEntity,
     CBGoal,
@@ -48,6 +47,21 @@ def _mongo_roundtrip(persistence_cls, domain_cls, domain_instance):
 def test_base_entity_defaults_have_id():
     e = BaseEntity()
     assert e.id, "BaseEntity should default `id` to a non-empty value"
+
+
+def test_mongo_stringifies_reference_objectids():
+    """Adapter boundary stringifies *all* ObjectId fields, not just `_id`,
+    so the domain (and the API str contract) never sees a raw ObjectId.
+    """
+    from openwellness_core.adapters.mongo.model.mongo_device import MongoDevice
+    from openwellness_core.domain.models.device import Device
+
+    pid = ObjectId()
+    doc = {"_id": ObjectId(), "serialNumber": "SN1", "participantId": pid}
+    dev = MongoDevice.model_validate(doc).to_domain(Device)
+
+    assert isinstance(dev.participant_id, str)
+    assert dev.participant_id == str(pid)
 
 
 def test_base_owner_entity_audit_defaults():
@@ -141,9 +155,118 @@ def test_archive_is_on_base_repository_interface():
     )
 
     assert "archive" in BaseCrudRepository.__abstractmethods__
-    # Domain bases have no `archive()` method
+    assert "unarchive" in BaseCrudRepository.__abstractmethods__
+    # Domain bases have no `archive()` / `unarchive()` method
     assert not hasattr(BaseEntity, "archive")
     assert not hasattr(BaseOwnerEntity, "archive")
+    assert not hasattr(BaseEntity, "unarchive")
+    assert not hasattr(BaseOwnerEntity, "unarchive")
+
+
+def test_mongo_base_repo_list_all_round_trip():
+    """`MongoBaseRepository.list_all()` returns every stored entity as a domain
+    object, regardless of which Mongo repo subclass is used.
+    """
+    from openwellness_core.adapters.mongo.repositories.mongo_user_repository import (
+        MongoUserRepository,
+    )
+
+    class _FakeMongoCollection:
+        def __init__(self) -> None:
+            self.docs: dict[ObjectId, dict] = {}
+
+        def insert_one(self, doc: dict):
+            oid = doc.get("_id") or ObjectId()
+            doc["_id"] = oid
+            self.docs[oid] = doc
+
+            class _Result:
+                inserted_id = oid
+
+            return _Result()
+
+        def find(self, query: dict | None = None):
+            return list(self.docs.values())
+
+        def find_one(self, query: dict):
+            oid = query.get("_id")
+            return self.docs.get(oid)
+
+    class _FakeMongoDB:
+        def __init__(self) -> None:
+            self._collections: dict[str, _FakeMongoCollection] = {}
+
+        def __getitem__(self, name: str) -> _FakeMongoCollection:
+            return self._collections.setdefault(name, _FakeMongoCollection())
+
+    db = _FakeMongoDB()
+    repo = MongoUserRepository(db)  # type: ignore[arg-type]
+    repo.create(User(email="a@b.com", username="alice", is_active=True))
+    repo.create(User(email="c@d.com", username="bob", is_active=False))
+
+    all_users = repo.list_all()
+    assert len(all_users) == 2
+    emails = {u.email for u in all_users}
+    assert emails == {"a@b.com", "c@d.com"}
+
+
+def test_cb_base_repo_list_all_round_trip():
+    """`CBBaseRepository.list_all()` builds a typed N1QL query against the
+    bucket and rehydrates rows into domain entities.
+    """
+    from openwellness_core.adapters.couchbase.repositories.cb_asset_repository import (
+        CBAssetRepository,
+    )
+
+    from .test_repositories_queries import FakeEntityRepository
+
+    class _CapturingRepo(FakeEntityRepository):
+        """Round-trips dicts created via `create()` through `get_by_query`."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self._store: list[dict] = []
+
+        def create(self, obj: dict) -> dict:
+            self._store.append(obj)
+            return obj
+
+        def get_by_query(self, query: str, params: dict | None = None):
+            self.last_query = query
+            self.last_params = params or {}
+            return list(self._store)
+
+    fake = _CapturingRepo()
+    repo = CBAssetRepository(fake)
+
+    from openwellness_core.domain.models.asset import Asset
+
+    repo.create(
+        Asset(
+            owner="p1",
+            study_id="s1",
+            title="t1",
+            url="https://example.com/1",
+            source_changed_at=1.0,
+        )
+    )
+    repo.create(
+        Asset(
+            owner="p1",
+            study_id="s1",
+            title="t2",
+            url="https://example.com/2",
+            source_changed_at=2.0,
+        )
+    )
+
+    all_assets = repo.list_all()
+    assert len(all_assets) == 2
+    titles = {a.title for a in all_assets}
+    assert titles == {"t1", "t2"}
+    # list_all should issue a typed query against the bucket.
+    assert "FROM `ow-bucket`" in (fake.last_query or "")
+    assert fake.last_params == {"type": "Asset"}
 
 
 def test_cbbase_owner_entity_has_audit_fields():

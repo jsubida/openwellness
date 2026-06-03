@@ -1,0 +1,1 @@
+"""OpenWellness FastAPI service."""

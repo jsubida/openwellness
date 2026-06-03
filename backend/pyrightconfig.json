@@ -1,5 +1,6 @@
 {
-  "include": ["src"],
+  "include": ["core/src", "core/tests"],
+  "extraPaths": ["core/src"],
   "exclude": ["**/__pycache__", ".venv"],
   "pythonVersion": "3.12",
   "venvPath": ".",

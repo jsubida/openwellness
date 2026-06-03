@@ -7,6 +7,7 @@ from ....domain.exceptions.domain_exception import EntityNotFoundException
 from ....domain.models.base_entity import BaseEntity
 from ....infrastructure.interfaces.entity_repository import EntityRepository
 from ..model.cb_base_entity import CBBaseEntity
+from ._query_helpers import bucket_ident
 
 Entity = TypeVar("Entity", bound=BaseEntity)
 Persistence = TypeVar("Persistence", bound=CBBaseEntity)
@@ -61,6 +62,11 @@ class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
             self._from_doc(item) for item in self.execute_query(query, params)
         ]
 
+    def list_all(self) -> list[Entity]:
+        b = bucket_ident(self.repo.bucket)
+        q = f"SELECT b.* FROM {b} AS b WHERE b.type = $type"
+        return self.get_by_query(q, {"type": self.persistence_type.type})
+
     def init_entity_valid_fields(self, data: dict) -> Entity:
         """Create an entity from a wire-format dict (e.g., raw N1QL rows)."""
         return self._from_doc(data)
@@ -91,3 +97,24 @@ class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
         if entity is None:
             raise EntityNotFoundException(f"Entity {entity_id} not found")
         self.repo.create(self._to_doc(entity, archived=True))
+
+    def unarchive(self, entity_id: str) -> None:
+        """Drop the archive copy of an entity, if one exists.
+
+        In the Couchbase representation, archiving stores a *new* document
+        with ``type = "<EntityType>Archived"`` (see
+        :meth:`CBBaseEntity.from_domain`). The original document keeps its
+        live ``type``. Unarchive deletes the archived document so a future
+        ``archive(...)`` call won't conflict; the original is untouched.
+        """
+        b = bucket_ident(self.repo.bucket)
+        archived_type = f"{self.persistence_type.type}Archived"
+        q = (
+            f"SELECT META(b).id AS doc_id FROM {b} AS b "
+            f"WHERE b.id = $entity_id AND b.type = $archived_type"
+        )
+        rows = self.repo.get_by_query(
+            q, {"entity_id": entity_id, "archived_type": archived_type}
+        )
+        for row in rows:
+            self.repo.delete(row["doc_id"])
