@@ -25,43 +25,10 @@ concrete `ParticipantRepository` by `SchedulerContainer`; the
 ## Configuration
 
 The scheduler reads all settings from the environment. For local development,
-put them in `backend/.env` (one shared file for the workspace). The variables
-the scheduler cares about:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `CELERY_BROKER_URL` | `redis://localhost:6379/0` | Message broker the worker pulls tasks from. |
-| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Where task results are stored. |
-| `CELERY_TASK_DEFAULT_QUEUE` | `openwellness` | Default queue name for tasks. |
-| `CELERY_TIMEZONE` | `UTC` | Timezone used by beat schedules. |
-| `COUCHBASE_URL` | `couchbase://localhost` | Couchbase cluster the repositories connect to. |
-| `COUCHBASE_USERNAME` | `Administrator` | Couchbase auth user. |
-| `COUCHBASE_PASSWORD` | `password` | Couchbase auth password. |
-| `COUCHBASE_BUCKET_NAME` | `openwellness` | Couchbase bucket holding the domain data. |
-| `SYNC_GATEWAY_URL` | `http://localhost:4984/openwellness` | Sync Gateway endpoint. |
-| `MONGO_URL` | `mongodb://localhost:27017` | Mongo connection string. |
-| `MONGO_DB` | `openwellness` | Mongo database name. |
-
-Example `backend/.env`:
-
-```sh
-# Celery broker / result backend
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/1
-
-# Couchbase
-COUCHBASE_URL=couchbase://localhost
-COUCHBASE_USERNAME=Administrator
-COUCHBASE_PASSWORD=password
-COUCHBASE_BUCKET_NAME=openwellness
-
-# Sync Gateway
-SYNC_GATEWAY_URL=http://localhost:4984/openwellness
-
-# Mongo
-MONGO_URL=mongodb://localhost:27017
-MONGO_DB=openwellness
-```
+put them in `backend/.env` (one shared file for the workspace). The full
+variable list, defaults, and an example file live in the
+[backend README](../README.md#configuration); the scheduler additionally reads
+the `CELERY_*` variables documented there.
 
 ## Setup
 
