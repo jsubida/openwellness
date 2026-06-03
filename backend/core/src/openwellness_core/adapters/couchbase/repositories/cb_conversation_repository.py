@@ -1,4 +1,4 @@
- """Couchbase repository for Conversations."""
+"""Couchbase repository for Conversations."""
 
 from typing import Any
 
