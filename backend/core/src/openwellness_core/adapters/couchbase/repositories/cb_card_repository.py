@@ -2,7 +2,7 @@
 
 from ....application.repositories.card_repository import CardRepository, SomeCard
 from ....domain.models.card import Card
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_card import CBCard
 from .cb_base_repository import CBBaseRepository
 

@@ -1,10 +1,10 @@
 """Couchbase repository for MessageDraft."""
 
-from ....application.repositories.message_draft_repository import MessageDraftRepository
-from ....domain.models.message_draft import MessageDraft
-from ....infrastructure.interfaces.entity_repository import EntityRepository
 from typing import Any
 
+from ....application.repositories.message_draft_repository import MessageDraftRepository
+from ....domain.models.message_draft import MessageDraft
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_conversation import CBMessageDraft
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

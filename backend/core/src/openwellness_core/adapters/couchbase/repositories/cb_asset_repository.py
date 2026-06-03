@@ -4,7 +4,7 @@ from typing import Any, Generic, List, Optional, Type
 
 from ....application.repositories.asset_repository import AssetRepository, SomeAsset
 from ....domain.models.asset import Asset
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_asset import CBAsset
 from ._query_helpers import allowed_column, bucket_ident
 from .cb_base_repository import CBBaseRepository

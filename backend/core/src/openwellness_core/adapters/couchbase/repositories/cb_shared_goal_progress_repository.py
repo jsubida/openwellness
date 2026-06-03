@@ -5,7 +5,7 @@ from ....application.repositories.shared_goal_progress_repository import (
     SomeSharedGoalProgress,
 )
 from ....domain.models.shared_goal_progress import SharedGoalProgress
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_shared_goal_progress import CBSharedGoalProgress
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

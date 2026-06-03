@@ -11,7 +11,7 @@ from ....application.repositories.participant_group_repository import (
     SomeParticipantGroup,
 )
 from ....domain.models.participant_group import ParticipantGroup
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_participant_group import CBParticipantGroup
 from .cb_base_repository import CBBaseRepository
 

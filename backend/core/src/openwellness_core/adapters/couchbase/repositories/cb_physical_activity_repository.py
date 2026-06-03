@@ -8,7 +8,7 @@ from ....application.repositories.physical_activity_repository import (
     PhysicalActivityRepository,
 )
 from ....domain.models.physical_activity import PhysicalActivity
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_physical_activity import CBPhysicalActivity
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

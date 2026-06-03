@@ -1,4 +1,4 @@
-"""Couchbase repository for Conversations."""
+ """Couchbase repository for Conversations."""
 
 from typing import Any
 
@@ -7,7 +7,7 @@ from ....application.repositories.conversation_repository import (
     SomeConversation,
 )
 from ....domain.models.conversation import Conversation
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_conversation import CBConversation
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

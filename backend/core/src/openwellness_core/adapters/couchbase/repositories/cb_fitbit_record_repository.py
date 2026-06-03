@@ -5,7 +5,7 @@ from typing import Type
 from ....application.dtos.activity_data_dto import ActivityDataInputDTO
 from ....application.repositories.fitbit_record_repository import FitbitRecordRepository
 from ....domain.models.fitbit_record import FitbitRecord
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_fitbit import CBFitbitRecord
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

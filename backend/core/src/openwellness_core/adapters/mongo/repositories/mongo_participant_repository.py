@@ -9,7 +9,7 @@ from ....application.repositories.participant_repository import (
     SomeParticipant,
 )
 from ....domain.models.participant import Participant
-from ....infrastructure.interfaces.collection_repository import CollectionRepository
+from ...interfaces.collection_repository import CollectionRepository
 from ..model.mongo_participant import MongoParticipant
 from .mongo_base_repository import MongoBaseRepository
 

@@ -7,7 +7,7 @@ from ....application.repositories.meta_data_repository import (
     SomeMetaData,
 )
 from ....domain.models.meta_data import MetaData
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_meta_data import CBMetaData
 from ._query_helpers import allowed_column, bucket_ident
 from .cb_base_repository import CBBaseRepository

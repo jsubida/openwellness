@@ -8,9 +8,9 @@ from bson import ObjectId
 from ....application.repositories.base_crud_repository import BaseCrudRepository
 from ....domain.exceptions.domain_exception import EntityNotFoundException
 from ....domain.models.base_entity import BaseEntity
-from ....infrastructure.interfaces.collection_repository import CollectionRepository
-from ....infrastructure.interfaces.results.delete_result import DeleteResult
 from ...exceptions import AdapterException
+from ...interfaces.collection_repository import CollectionRepository
+from ...interfaces.results.delete_result import DeleteResult
 from ..model.mongo_base_entity import MongoBaseEntity
 
 Entity = TypeVar("Entity", bound=BaseEntity)
