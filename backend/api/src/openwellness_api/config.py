@@ -68,6 +68,15 @@ class APISettings(BaseSettings):
     default_page_size: int = Field(default=50, ge=1, le=1000)
     max_page_size: int = Field(default=1000, ge=1, le=10000)
     time_range_max_span_days: int = 7
+    # CORS — comma-separated allowed browser origins for the dashboard SPA.
+    # Kept as a plain ``str`` (not ``list[str]``): pydantic-settings parses a
+    # bare ``list[str]`` env value as JSON, which breaks a comma-separated
+    # ``API_CORS_ALLOWED_ORIGINS``.
+    cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
 
 
 class RedisSettings(BaseSettings):

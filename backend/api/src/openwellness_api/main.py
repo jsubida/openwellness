@@ -13,6 +13,7 @@ from typing import AsyncIterator
 
 from dependency_injector import providers
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .config import APISettings, AppConfig
 from .container import ApplicationContainer
@@ -94,6 +95,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = APISettings()
     app = FastAPI(title=settings.title, lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        # Browsers hide non-safelisted response headers from JS unless exposed;
+        # the dashboard reads Retry-After for the 429 resend-cooldown fallback.
+        expose_headers=["Retry-After"],
+    )
     register_exception_handlers(app)
     app.include_router(build_v1_router())
 
