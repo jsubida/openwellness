@@ -1,5 +1,7 @@
 """Mongo repository for App."""
 
+import os
+
 from ....application.repositories.app_repository import AppRepository
 from ....domain.models.app import App
 from ...interfaces.collection_repository import CollectionRepository
@@ -19,9 +21,11 @@ class MongoAppRepository(AppRepository, MongoBaseRepository[App, MongoApp]):
         self.entity_type = App
 
     def create_app(self, name: str, unlistedLink: bool = True) -> App:
+        # Deployment-specific identifiers come from the environment (see the
+        # repository-root .env.example); unset variables leave the fields None.
         app = App(name=name)
         if unlistedLink:
-            app.app_store_id = "1659933622"
-            app.ios_bundle_id = "edu.northwestern.CATALYST"
-            app.one_signal_app_id = "43ea134a-f78d-4a94-aea6-34cac370650b"
+            app.app_store_id = os.environ.get("APP_STORE_ID")
+            app.ios_bundle_id = os.environ.get("APP_IOS_BUNDLE_ID")
+            app.one_signal_app_id = os.environ.get("APP_ONE_SIGNAL_APP_ID")
         return self.create(app)
