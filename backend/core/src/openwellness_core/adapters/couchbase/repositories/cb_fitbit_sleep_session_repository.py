@@ -9,7 +9,7 @@ from ....application.repositories.fitbit_sleep_session_repository import (
     SomeFitbitSleepSession,
 )
 from ....domain.models.fitbit_sleep_session import FitbitSleepSession
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_fitbit import CBFitbitSleepSession
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

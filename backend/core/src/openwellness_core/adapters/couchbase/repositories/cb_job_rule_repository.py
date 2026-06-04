@@ -1,3 +1,4 @@
+
 """Couchbase repository for JobRule."""
 
 from typing import Generic, Type
@@ -7,7 +8,7 @@ from ....application.repositories.job_rule_repository import (
     SomeJobRule,
 )
 from ....domain.models.job_rule import JobRule
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_job_rule import CBJobRule
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

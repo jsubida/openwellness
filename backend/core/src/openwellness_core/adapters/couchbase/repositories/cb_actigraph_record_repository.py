@@ -8,7 +8,7 @@ from ....application.repositories.actigraph_record_repository import (
     ActigraphRecordRepository,
 )
 from ....domain.models.actigraph_record import ActigraphRecord
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_actigraph_record import CBActigraphRecord
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

@@ -7,7 +7,7 @@ from ....application.repositories.daily_state_repository import (
     SomeDailyState,
 )
 from ....domain.models.daily_state import DailyState
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_daily_state import CBDailyState
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

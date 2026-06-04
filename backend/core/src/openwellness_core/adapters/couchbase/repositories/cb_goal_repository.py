@@ -7,7 +7,7 @@ from arrow import Arrow
 from ....application.repositories.goal_repository import GoalRepository, SomeGoal
 from ....domain.models.goal import Goal
 from ....domain.models.goal.kind import Kind, SomeKind, SomeKindArg
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_goal import CBGoal
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

@@ -4,7 +4,7 @@ from typing import Any, List, Type, TypeVar
 
 from ....application.repositories.session_repository import SessionRepository
 from ....domain.models.session import Session
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_session import CBSession
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

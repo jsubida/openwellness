@@ -9,7 +9,7 @@ from ....application.repositories.user_food_repository import (
     UserFoodRepository,
 )
 from ....domain.models.user_food import UserFood
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_user import CBUserFood
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

@@ -7,7 +7,7 @@ from ....application.repositories.fitbit_repository import (
     SomeFitbit,
 )
 from ....domain.models.fitbit import Fitbit
-from ....infrastructure.interfaces.collection_repository import CollectionRepository
+from ...interfaces.collection_repository import CollectionRepository
 from ..model.mongo_fitbit import MongoFitbit
 from .mongo_base_repository import MongoBaseRepository
 

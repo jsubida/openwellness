@@ -9,7 +9,7 @@ from ....application.repositories.device_repository import (
     SomeDevice,
 )
 from ....domain.models.device import Device
-from ....infrastructure.interfaces.collection_repository import CollectionRepository
+from ...interfaces.collection_repository import CollectionRepository
 from ..model.mongo_device import MongoDevice
 from .mongo_base_repository import MongoBaseRepository
 

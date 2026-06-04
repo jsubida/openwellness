@@ -4,7 +4,7 @@ from typing import List, Type, TypeVar
 
 from ....application.repositories.user_stress_repository import UserStressRepository
 from ....domain.models.user_stress import UserStress
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_user import CBUserStress
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

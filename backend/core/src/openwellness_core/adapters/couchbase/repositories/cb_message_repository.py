@@ -1,3 +1,4 @@
+
 """Couchbase repository for Message."""
 
 from typing import Any, Generic, Type
@@ -9,7 +10,7 @@ from ....application.repositories.message_repository import (
     SomeMessage,
 )
 from ....domain.models.message import Message
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_conversation import CBMessage
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

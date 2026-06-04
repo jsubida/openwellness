@@ -8,7 +8,7 @@ from ....application.repositories.fitbit_heart_record_repository import (
     SomeFitbitHeartRecord,
 )
 from ....domain.models.fitbit_heart_record import FitbitHeartRecord
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_fitbit import CBFitbitHeartRecord
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

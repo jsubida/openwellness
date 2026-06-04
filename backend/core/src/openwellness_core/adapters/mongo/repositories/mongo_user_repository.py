@@ -4,7 +4,7 @@ from typing import Generic
 
 from ....application.repositories.user_repository import SomeUser, UserRepository
 from ....domain.models.user import User
-from ....infrastructure.interfaces.collection_repository import CollectionRepository
+from ...interfaces.collection_repository import CollectionRepository
 from ..model.mongo_user import MongoUser
 from .mongo_base_repository import MongoBaseRepository
 

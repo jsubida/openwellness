@@ -5,7 +5,7 @@ from typing import Any, Generic, Type, TypeVar
 from ....application.repositories.base_crud_repository import BaseCrudRepository
 from ....domain.exceptions.domain_exception import EntityNotFoundException
 from ....domain.models.base_entity import BaseEntity
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_base_entity import CBBaseEntity
 from ._query_helpers import bucket_ident
 

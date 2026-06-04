@@ -2,8 +2,8 @@
 
 from pymongo import MongoClient
 
+from ...adapters.interfaces.collection_repository import CollectionRepository
 from ..config.app_config import AppConfigInterface
-from ..interfaces.collection_repository import CollectionRepository
 
 
 class MDBCollectionRepository(CollectionRepository):
