@@ -48,8 +48,15 @@ function sessionFromAccessToken(accessToken: string): SessionInfo | null {
   if (claims == null || !hasCoachOrAdminRole(claims)) return null
   return {
     userId: claims.sub ?? '',
+    // JWT carries the bare participant id (e.g. "p2"); the login path stores
+    // the AIP resource name from the principal ("participants/p2"). SessionInfo
+    // standardises on the resource-name form regardless of entry path.
     participant:
-      typeof claims.participant === 'string' ? claims.participant : null,
+      typeof claims.participant === 'string' && claims.participant.length > 0
+        ? claims.participant.includes('/')
+          ? claims.participant
+          : `participants/${claims.participant}`
+        : null,
     roles: claims.roles,
   }
 }

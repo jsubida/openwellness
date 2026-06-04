@@ -38,13 +38,14 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-// Probe that renders the live auth status + userId, plus a sign-out trigger.
+// Probe that renders the live auth status + userId + participant, plus a sign-out trigger.
 function Probe() {
   const { status, session, signOut } = useAuth()
   return (
     <div>
       <span data-testid="status">{status}</span>
       <span data-testid="userId">{session?.userId ?? '∅'}</span>
+      <span data-testid="participant">{session?.participant ?? '∅'}</span>
       <button onClick={() => void signOut()}>Sign out</button>
     </div>
   )
@@ -89,7 +90,12 @@ describe('AuthProvider — bootstrap', () => {
       accessToken: 'stale-access',
       refreshToken: 'stored-refresh',
     })
-    const access = fakeJwt({ sub: 'users/u1', roles: ['coach'] })
+    // JWT carries bare participant id "p7"; SessionInfo must normalise to resource name.
+    const access = fakeJwt({
+      sub: 'users/u1',
+      roles: ['coach'],
+      participant: 'p7',
+    })
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => jsonResponse(refreshBody(access))),
@@ -101,6 +107,9 @@ describe('AuthProvider — bootstrap', () => {
       expect(screen.getByTestId('status')).toHaveTextContent('authenticated'),
     )
     expect(screen.getByTestId('userId')).toHaveTextContent('users/u1')
+    expect(screen.getByTestId('participant')).toHaveTextContent(
+      'participants/p7',
+    )
   })
 
   it('clears storage and stays unauthenticated when the role gate fails', async () => {

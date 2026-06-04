@@ -83,6 +83,7 @@ target a local stack.
 | `API_DEFAULT_PAGE_SIZE` | `50` | Default `page_size` when unset |
 | `API_MAX_PAGE_SIZE` | `1000` | Upper bound for `page_size` |
 | `API_TIME_RANGE_MAX_SPAN_DAYS` | `7` | Max window for required-time-range resources |
+| `API_CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated browser origins allowed by CORS (dashboard SPA) |
 
 ## API conventions
 
