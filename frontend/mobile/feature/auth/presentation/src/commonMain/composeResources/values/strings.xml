@@ -1,0 +1,30 @@
+<resources>
+    <string name="auth_brand_name">OpenWellness</string>
+    <string name="auth_landing_subtitle">Your wellness journey starts here.</string>
+    <string name="auth_landing_login">Log in</string>
+    <string name="auth_landing_register">Create account</string>
+
+    <string name="auth_login_title">Log in</string>
+    <string name="auth_register_title">Create your account</string>
+
+    <string name="auth_email_label">Email</string>
+    <string name="auth_participant_label">Participant ID</string>
+
+    <string name="auth_send_code">Send code</string>
+    <string name="auth_verify">Verify</string>
+    <string name="auth_resend">Resend code</string>
+    <string name="auth_resend_in">Resend in %ds</string>
+    <string name="auth_change_email">Change email</string>
+    <string name="auth_code_sent">Enter the 6-digit code we sent to %s.</string>
+    <string name="auth_otp_cd">6-digit verification code</string>
+
+    <string name="auth_error_invalid_code">That code is invalid or has expired.</string>
+    <string name="auth_error_rate_limited">Too many attempts. Please wait and try again.</string>
+    <string name="auth_error_unauthorized">Your session has expired. Please sign in again.</string>
+    <string name="auth_error_no_internet">No internet connection. Check your network and try again.</string>
+    <string name="auth_error_server">We\'re having trouble reaching the server. Please try again later.</string>
+    <string name="auth_error_unknown">Something went wrong. Please try again.</string>
+    <string name="auth_error_invalid_email">Enter a valid email address.</string>
+    <string name="auth_error_invalid_code_format">Enter the 6-digit code.</string>
+    <string name="auth_error_empty_participant">Enter your participant ID.</string>
+</resources>

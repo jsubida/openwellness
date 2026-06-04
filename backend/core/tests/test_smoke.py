@@ -149,7 +149,7 @@ def test_mongo_persistence_owns_collection_routing():
 
 
 def test_archive_is_on_base_repository_interface():
-    """`archive` is a base-repository concern, not a domain concern."""
+    """`archive` and `unarchive` are base-repository concerns, not domain concerns."""
     from openwellness_core.application.repositories.base_crud_repository import (
         BaseCrudRepository,
     )

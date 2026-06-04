@@ -22,3 +22,5 @@ class MongoUser(MongoBaseEntity):
     location: Any = None
     roles: Any = None
     time_created: Any = Field(alias="timeCreated", default=None)
+    verified_id: Any = Field(alias="verifiedId", default=None)
+    registered_at: Any = Field(alias="registeredAt", default=None)

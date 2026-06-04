@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
+from redis.exceptions import RedisError
 
 from openwellness_core.application.exceptions import LimitExceededException
 from openwellness_core.domain.exceptions.domain_exception import (
@@ -77,6 +78,25 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "RESOURCE_EXHAUSTED",
                 str(exc),
                 details=[{"retry_after_secs": retry_after}],
+            ),
+        )
+
+    @app.exception_handler(RedisError)
+    async def _redis_unavailable(_: Request, exc: RedisError) -> JSONResponse:
+        """Map any Redis error (connection/timeout/...) to a clean 503.
+
+        ``RedisError`` is the base class covering ConnectionError/TimeoutError,
+        so an OTP-backing Redis outage surfaces as a uniform "temporarily
+        unavailable" rather than a 500. Logged at error level by type only — no
+        request body, email, or OTP code is ever logged.
+        """
+        logger.error("Redis unavailable: %s", type(exc).__name__)
+        return JSONResponse(
+            status_code=503,
+            content=build_error(
+                503,
+                "UNAVAILABLE",
+                "The authentication service is temporarily unavailable.",
             ),
         )
 

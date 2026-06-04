@@ -1,0 +1,80 @@
+@import 'tailwindcss';
+
+/* Design tokens — mirror frontend/mobile core/presentation/theme/
+   (Color.kt OpenWellnessLightColors, Shapes.kt). Tailwind v4 exposes each
+   --color-* as bg-* / text-* / border-* utilities and --radius-* as
+   rounded-* (e.g. bg-primary, text-on-surface-variant, rounded-md). */
+@theme {
+  /* M3 light palette (Color.kt) */
+  --color-primary: #006a60;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #74f8e5;
+  --color-on-primary-container: #00201c;
+  --color-secondary: #4a635f;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #cce8e2;
+  --color-on-secondary-container: #051f1c;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #410002;
+  --color-background: #fafdfb;
+  --color-on-background: #191c1b;
+  --color-surface: #fafdfb;
+  --color-on-surface: #191c1b;
+  --color-surface-variant: #dae5e1;
+  --color-on-surface-variant: #3f4947;
+  --color-outline: #6f7976;
+  --color-outline-variant: #bec9c5;
+
+  /* shadcn/ui semantic tokens, mapped onto the M3 palette above so the
+     generated components pick up the brand automatically. */
+  --color-foreground: var(--color-on-background);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-on-surface);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-on-surface);
+  --color-primary-foreground: var(--color-on-primary);
+  --color-secondary-foreground: var(--color-on-secondary);
+  --color-muted: var(--color-surface-variant);
+  --color-muted-foreground: var(--color-on-surface-variant);
+  --color-accent: var(--color-secondary-container);
+  --color-accent-foreground: var(--color-on-secondary-container);
+  --color-destructive: var(--color-error);
+  --color-destructive-foreground: var(--color-on-error);
+  --color-border: var(--color-outline-variant);
+  --color-input: var(--color-outline);
+  --color-ring: var(--color-primary);
+
+  /* Radii (Shapes.kt): extraSmall..extraLarge = 4 / 8 / 12 / 16 / 28 */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 28px;
+
+  /* Subtle entrance for the login screen container. Registering it as an
+     --animate-* theme token exposes the `animate-fade-in-up` utility. Always
+     pair it with `motion-safe:` at the call site so it respects reduced motion. */
+  --animate-fade-in-up: fade-in-up 300ms ease-out both;
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-on-background antialiased;
+  }
+}

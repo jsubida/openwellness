@@ -17,3 +17,6 @@ class User(BaseEntity):
     location: str | None = None
     roles: dict = field(default_factory=dict)
     time_created: datetime = field(default_factory=datetime.now)
+
+    verified_id: str | None = None
+    registered_at: datetime | None = None
