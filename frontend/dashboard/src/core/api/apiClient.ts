@@ -149,6 +149,8 @@ async function rawRequest(
 
 /** Map a completed Response to a typed Result<T, DataError>. */
 async function interpret<T>(response: Response): Promise<Result<T, DataError>> {
+  // Assumes every 2xx carries a JSON body (true for all current endpoints);
+  // a future 204/no-content endpoint would need an explicit branch here.
   if (response.status >= 200 && response.status <= 299) {
     try {
       return ok((await response.json()) as T)

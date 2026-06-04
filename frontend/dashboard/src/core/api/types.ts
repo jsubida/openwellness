@@ -12,7 +12,7 @@ export interface ErrorBody {
   code: number
   status: string
   message: string
-  details: ErrorDetail[]
+  details?: ErrorDetail[]
 }
 
 export interface ErrorEnvelope {
