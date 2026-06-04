@@ -3,6 +3,7 @@ name = "openwellness-core"
 version = "0.1.0"
 description = "Shared domain models, repository interfaces, and persistence adapters for OpenWellness."
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "arrow>=1.3",
