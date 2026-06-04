@@ -52,6 +52,22 @@
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 28px;
+
+  /* Subtle entrance for the login screen container. Registering it as an
+     --animate-* theme token exposes the `animate-fade-in-up` utility. Always
+     pair it with `motion-safe:` at the call site so it respects reduced motion. */
+  --animate-fade-in-up: fade-in-up 300ms ease-out both;
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 @layer base {

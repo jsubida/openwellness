@@ -12,6 +12,7 @@ interface OtpInputProps {
   error?: boolean
   disabled?: boolean
   autoFocus?: boolean
+  'aria-describedby'?: string
 }
 
 const LENGTH = 6
@@ -36,6 +37,7 @@ function OtpInput({
   error = false,
   disabled = false,
   autoFocus = false,
+  'aria-describedby': ariaDescribedBy,
 }: OtpInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [focused, setFocused] = useState(false)
@@ -98,6 +100,7 @@ function OtpInput({
         onBlur={() => setFocused(false)}
         disabled={disabled}
         autoFocus={autoFocus}
+        aria-describedby={ariaDescribedBy}
         className="absolute inset-0 z-10 h-full w-full cursor-default opacity-0"
         style={{ letterSpacing: 0 }}
       />
