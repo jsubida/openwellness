@@ -86,6 +86,11 @@ export default defineConfig([
     files: ['src/core/ui/**/*.tsx'],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
+  // Context providers conventionally co-export their hook + types.
+  {
+    files: ['src/core/auth/AuthContext.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
   // model/ is pure domain logic — keep React out of it. api/ stays
   // React-free too, except mutations.ts (the TanStack Query glue).
   {
