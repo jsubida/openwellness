@@ -8,7 +8,7 @@ from ....application.repositories.study_message_repository import (
     StudyMessageRepository,
 )
 from ....domain.models.study_message import StudyMessage
-from ....infrastructure.interfaces.collection_repository import CollectionRepository
+from ...interfaces.collection_repository import CollectionRepository
 from ..model.mongo_study_message import MongoStudyMessage
 from .mongo_base_repository import MongoBaseRepository
 

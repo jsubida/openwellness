@@ -4,7 +4,7 @@ from typing import Any
 
 from ....application.repositories.post_repository import PostRepository, SomePost
 from ....domain.models.post import Post
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_post import CBPost
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

@@ -7,7 +7,7 @@ from ....application.repositories.study_settings_repository import (
     StudySettingsRepository,
 )
 from ....domain.models.study_settings import StudySettings
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_study_settings import CBStudySettings
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

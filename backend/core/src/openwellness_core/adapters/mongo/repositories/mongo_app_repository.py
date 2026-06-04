@@ -2,7 +2,7 @@
 
 from ....application.repositories.app_repository import AppRepository
 from ....domain.models.app import App
-from ....infrastructure.interfaces.collection_repository import CollectionRepository
+from ...interfaces.collection_repository import CollectionRepository
 from ..model.mongo_app import MongoApp
 from .mongo_base_repository import MongoBaseRepository
 

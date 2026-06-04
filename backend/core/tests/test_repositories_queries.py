@@ -16,7 +16,6 @@ from typing import Optional
 
 import arrow
 import pytest
-
 from openwellness_core.adapters.couchbase.repositories._query_helpers import (
     allowed_column,
 )
@@ -98,11 +97,10 @@ from openwellness_core.adapters.couchbase.repositories.cb_user_stress_repository
 from openwellness_core.adapters.couchbase.repositories.cb_weight_repository import (
     CBWeightRepository,
 )
-from openwellness_core.domain.models.conversation import Conversation
-from openwellness_core.infrastructure.interfaces.entity_repository import (
+from openwellness_core.adapters.interfaces.entity_repository import (
     EntityRepository,
 )
-
+from openwellness_core.domain.models.conversation import Conversation
 
 BUCKET = "ow-bucket"
 

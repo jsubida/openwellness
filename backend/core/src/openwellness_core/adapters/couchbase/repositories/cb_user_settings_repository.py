@@ -6,7 +6,7 @@ from ....application.repositories.user_settings_repository import (
     UserSettingsRepository,
 )
 from ....domain.models.user_settings import UserSettings
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_user import CBUserSettings
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository

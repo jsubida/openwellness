@@ -11,9 +11,9 @@ import requests
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
 
+from ...adapters.interfaces.entity_repository import EntityRepository
 from ...domain.exceptions.domain_exception import NotFound
 from ..config.app_config import AppConfigInterface
-from ..interfaces.entity_repository import EntityRepository
 
 
 class CBEntityRepository(EntityRepository):

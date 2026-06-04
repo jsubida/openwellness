@@ -2,7 +2,7 @@
 
 from ....application.repositories.study_repository import StudyRepository
 from ....domain.models.study import Study
-from ....infrastructure.interfaces.collection_repository import CollectionRepository
+from ...interfaces.collection_repository import CollectionRepository
 from ..model.mongo_study import MongoStudy
 from .mongo_base_repository import MongoBaseRepository
 

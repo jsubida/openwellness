@@ -2,7 +2,7 @@
 
 from ....application.repositories.admin_repository import AdminRepository
 from ....domain.models.admin import Admin
-from ....infrastructure.interfaces.collection_repository import CollectionRepository
+from ...interfaces.collection_repository import CollectionRepository
 from ..model.mongo_admin import MongoAdmin
 from .mongo_base_repository import MongoBaseRepository
 

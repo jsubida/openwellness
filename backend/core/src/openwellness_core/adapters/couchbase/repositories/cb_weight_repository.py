@@ -6,7 +6,7 @@ from arrow import Arrow
 
 from ....application.repositories.weight_repository import WeightRepository
 from ....domain.models.weight import Weight
-from ....infrastructure.interfaces.entity_repository import EntityRepository
+from ...interfaces.entity_repository import EntityRepository
 from ..model.cb_weight import CBWeight
 from ._query_helpers import bucket_ident
 from .cb_base_repository import CBBaseRepository
