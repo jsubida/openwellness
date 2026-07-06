@@ -32,15 +32,22 @@ the `CELERY_*` variables documented there.
 
 ## Setup
 
-Run from the `backend/` workspace root so the shared `uv.lock` is used.
+From `backend/` (the workspace root), sync the environment. Pass
+`--extra dev` so the test and type-check tools (`pytest`, `pyright`,
+declared under `[project.optional-dependencies]`) land in the shared
+workspace venv — a plain `uv sync` omits them, and `uv run pytest` then
+fails to resolve `openwellness_core`:
 
-```sh
-# Install the workspace (core + scheduler) into the virtualenv.
-uv sync
+```bash
+cd backend
+uv sync --extra dev
 
 # A broker is required to run a worker. The defaults assume a local Redis:
 docker run -d --name redis -p 6379:6379 redis:7
 ```
+
+`core` installs as an editable package, so `import openwellness_core` works
+from the test suite and any consumer without a rebuild.
 
 ## Running
 
