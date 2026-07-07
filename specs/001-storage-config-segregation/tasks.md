@@ -31,7 +31,7 @@ Rules:
       (`config.couchbase.*` → `couchbase.*`, `config.sync_gateway.get_url()` →
       `sync_gateway.get_url()`). Add a unit test constructing it with a minimal
       fake satisfying just those two protocols. _(Story 1)_
-- [ ] 5. Update `MDBCollectionRepository.__init__` in
+- [x] 5. Update `MDBCollectionRepository.__init__` in
       `backend/core/.../infrastructure/drivers/mdb_collection_repository.py` to
       take `mongo: MongoConfig` instead of `config: AppConfigInterface`. Add a
       unit test constructing it with a minimal fake `MongoConfig`. _(Story 1)_
