@@ -2,3 +2,4 @@
 
 from .cb_entity_repository import CBEntityRepository
 from .mdb_collection_repository import MDBCollectionRepository
+from .pg_engine import PGEngineFactory
