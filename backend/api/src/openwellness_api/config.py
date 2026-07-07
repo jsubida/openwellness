@@ -25,11 +25,17 @@ class AppConfig(AppConfigInterface):
         self._couchbase = CouchbaseSettings()
         self._sync_gateway = SyncGatewaySettings()
         self._mongo = MongoSettings()
-        self._postgres = PostgresSettings()
-        if self._storage.storage_backend == "postgres" and not self._postgres.url:
-            raise ValueError(
-                "STORAGE_BACKEND=postgres requires POSTGRES_URL to be set"
-            )
+        if self._storage.storage_backend == "postgres":
+            self._postgres = PostgresSettings()
+            if not self._postgres.url:
+                raise ValueError(
+                    "STORAGE_BACKEND=postgres requires POSTGRES_URL to be set"
+                )
+        else:
+            # Don't parse POSTGRES_* env vars when Postgres isn't selected —
+            # a malformed value (e.g. non-int POSTGRES_POOL_SIZE) shouldn't
+            # crash startup on the couchbase-mongo path.
+            self._postgres = PostgresSettings(url="", pool_size=5)
 
     @property
     def couchbase(self) -> CouchbaseSettings:

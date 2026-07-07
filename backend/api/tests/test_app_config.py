@@ -37,3 +37,12 @@ def test_invalid_backend_value_raises_validation_error(monkeypatch):
 
     with pytest.raises(ValidationError):
         AppConfig()
+
+
+def test_default_backend_ignores_malformed_postgres_env(monkeypatch):
+    monkeypatch.delenv("STORAGE_BACKEND", raising=False)
+    monkeypatch.setenv("POSTGRES_POOL_SIZE", "not-an-int")
+
+    config = AppConfig()
+
+    assert config.storage_backend == "couchbase-mongo"
