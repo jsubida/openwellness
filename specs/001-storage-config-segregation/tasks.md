@@ -56,7 +56,7 @@ Rules:
       set `POSTGRES_URL` constructs cleanly; `STORAGE_BACKEND=nonsense` raises
       `pydantic.ValidationError`. Use `monkeypatch.setenv`/`delenv` per case.
       _(Story 3)_
-- [ ] 9. Repeat tasks 7-8 for
+- [x] 9. Repeat tasks 7-8 for
       `backend/scheduler/src/openwellness_scheduler/config.py` and
       `backend/scheduler/tests/test_app_config.py` — same shape, `CelerySettings`
       untouched. _(Story 2, Story 3)_
