@@ -50,7 +50,7 @@ Rules:
       `storage_backend == "postgres"` and `postgres.url` is empty. Leave
       `APISettings`, `RedisSettings`, `SmtpSettings`, `AuthSettings` untouched.
       _(Story 2, Story 3)_
-- [ ] 8. Add `backend/api/tests/test_app_config.py` covering: default
+- [x] 8. Add `backend/api/tests/test_app_config.py` covering: default
       (`couchbase-mongo`) constructs cleanly; `STORAGE_BACKEND=postgres` +
       unset `POSTGRES_URL` raises `ValueError`; `STORAGE_BACKEND=postgres` +
       set `POSTGRES_URL` constructs cleanly; `STORAGE_BACKEND=nonsense` raises
