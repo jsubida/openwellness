@@ -21,7 +21,7 @@ Rules:
 - [x] 2. Add `PostgresConfig` protocol and `postgres`/`storage_backend`
       properties to `AppConfigInterface` in
       `backend/core/.../infrastructure/config/app_config.py`. _(Story 1, Story 3)_
-- [ ] 3. Export the new settings module from
+- [x] 3. Export the new settings module from
       `backend/core/.../infrastructure/config/__init__.py` (check what's
       currently exported there and extend rather than replace). _(Story 2)_
 - [ ] 4. Update `CBEntityRepository.__init__` in
