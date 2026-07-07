@@ -24,7 +24,7 @@ Rules:
 - [x] 3. Export the new settings module from
       `backend/core/.../infrastructure/config/__init__.py` (check what's
       currently exported there and extend rather than replace). _(Story 2)_
-- [ ] 4. Update `CBEntityRepository.__init__` in
+- [x] 4. Update `CBEntityRepository.__init__` in
       `backend/core/.../infrastructure/drivers/cb_entity_repository.py` to take
       `couchbase: CouchbaseConfig, sync_gateway: SyncGatewayConfig` instead of
       `config: AppConfigInterface`; update its two internal reads
