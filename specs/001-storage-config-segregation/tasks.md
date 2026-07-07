@@ -64,7 +64,7 @@ Rules:
       `STORAGE_BACKEND`, `POSTGRES_URL`, `POSTGRES_POOL_SIZE`, with a comment
       noting Postgres has no driver yet as of this phase and both vars are
       only required when `STORAGE_BACKEND=postgres`. _(Story 4)_
-- [ ] 11. Run `cd backend && uv run pyright` at the workspace root and fix any
+- [x] 11. Run `cd backend && uv run pyright` at the workspace root and fix any
       type errors surfaced by the constructor signature changes (containers,
       any remaining `AppConfigInterface`-typed call sites). _(Story 1)_
 - [ ] 12. Full verification sweep: `cd backend/core && uv run pytest`,
