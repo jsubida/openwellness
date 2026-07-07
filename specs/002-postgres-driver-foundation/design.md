@@ -60,7 +60,7 @@ filter dict for Mongo).
 | adapters (new) | `adapters/postgres/repositories/pg_base_repository.py` | New: `PGBaseRepository[Entity, Persistence]` implementing `BaseCrudRepository` |
 | infrastructure — drivers (new) | `infrastructure/drivers/pg_engine.py` | New: `PGEngineFactory(postgres: PostgresConfig)` — engine + sessionmaker |
 | infrastructure — migrations (new) | `backend/core/alembic/env.py`, `backend/core/alembic/versions/0001_initial.py`, `backend/core/alembic.ini` | New: Alembic environment + one migration for the shared table shape |
-| dependencies | `backend/core/pyproject.toml` | Add `sqlalchemy>=2.0`, `psycopg[binary]>=3`, `alembic>=1.13` as plain dependencies (see below); add `testcontainers[postgresql]` to the `dev` extra |
+| dependencies | `backend/core/pyproject.toml` | Add `sqlalchemy>=2.0`, `psycopg[binary]>=3`, `alembic>=1.13` as plain dependencies (see below); add `testcontainers[postgres]` to the `dev` extra |
 
 **Dependency placement decision:** `backend/core/pyproject.toml` currently
 lists `couchbase` and `pymongo` as unconditional top-level dependencies —

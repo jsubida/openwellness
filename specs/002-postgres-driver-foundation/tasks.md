@@ -11,7 +11,7 @@ Rules:
 ## Checklist
 
 - [x] 1. Add `sqlalchemy>=2.0`, `psycopg[binary]>=3`, `alembic>=1.13` to
-      `backend/core/pyproject.toml` dependencies, and `testcontainers[postgresql]`
+      `backend/core/pyproject.toml` dependencies, and `testcontainers[postgres]`
       to the `dev` optional-dependencies list. Run `uv sync --extra dev` in
       `backend/core`. _(Story 1, Story 4)_
 - [x] 2. Create `adapters/postgres/model/pg_base_entity.py` with the

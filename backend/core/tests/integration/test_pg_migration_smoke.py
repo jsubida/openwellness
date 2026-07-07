@@ -56,6 +56,7 @@ def _run_alembic(*args: str, url: str) -> None:
 @pytest.fixture()
 def postgres_url():
     try:
+        from docker.errors import DockerException
         from testcontainers.postgres import PostgresContainer
     except ImportError:
         pytest.skip("testcontainers is not installed")
@@ -63,7 +64,7 @@ def postgres_url():
     try:
         container = PostgresContainer("postgres:16-alpine", driver="psycopg")
         container.start()
-    except Exception as exc:  # pragma: no cover - environment-dependent
+    except DockerException as exc:  # pragma: no cover - environment-dependent
         pytest.skip(f"Docker unavailable: {exc}")
 
     try:
