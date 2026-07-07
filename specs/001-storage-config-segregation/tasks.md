@@ -67,7 +67,7 @@ Rules:
 - [x] 11. Run `cd backend && uv run pyright` at the workspace root and fix any
       type errors surfaced by the constructor signature changes (containers,
       any remaining `AppConfigInterface`-typed call sites). _(Story 1)_
-- [ ] 12. Full verification sweep: `cd backend/core && uv run pytest`,
+- [x] 12. Full verification sweep: `cd backend/core && uv run pytest`,
       `cd backend/api && uv run pytest`, `cd backend/scheduler && uv run pytest`
       all green; grep the whole `backend/` tree for `config: AppConfigInterface`
       and `config=app_config` to confirm no stale call sites remain outside the

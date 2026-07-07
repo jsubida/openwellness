@@ -1,6 +1,6 @@
 # Requirements: Storage Config Port Segregation & Backend Switch
 
-Status: approved
+Status: done
 Created: 2026-07-06
 
 ## Summary
