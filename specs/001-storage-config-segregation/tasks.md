@@ -18,7 +18,7 @@ Rules:
       `StorageBackendSettings`. Add unit tests in
       `backend/core/tests/infrastructure/config/test_settings.py` covering env
       prefix pickup and defaults for all five classes. _(Story 1, Story 3)_
-- [ ] 2. Add `PostgresConfig` protocol and `postgres`/`storage_backend`
+- [x] 2. Add `PostgresConfig` protocol and `postgres`/`storage_backend`
       properties to `AppConfigInterface` in
       `backend/core/.../infrastructure/config/app_config.py`. _(Story 1, Story 3)_
 - [ ] 3. Export the new settings module from
