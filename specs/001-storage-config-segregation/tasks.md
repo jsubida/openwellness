@@ -11,7 +11,7 @@ Rules:
 
 ## Checklist
 
-- [ ] 1. Create `backend/core/src/openwellness_core/infrastructure/config/settings.py`
+- [x] 1. Create `backend/core/src/openwellness_core/infrastructure/config/settings.py`
       with `CouchbaseSettings`, `SyncGatewaySettings`, `MongoSettings` moved in
       verbatim from `backend/api/.../config.py` (byte-identical field
       defaults/prefixes), plus new `PostgresSettings` and
