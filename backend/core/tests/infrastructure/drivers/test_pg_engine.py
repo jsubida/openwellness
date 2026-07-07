@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from sqlalchemy.pool import QueuePool
+
 from openwellness_core.infrastructure.drivers.pg_engine import PGEngineFactory
 
 
@@ -24,6 +26,7 @@ def test_builds_engine_and_session_factory_from_narrow_postgres_protocol():
 
     driver = PGEngineFactory(postgres=postgres)
 
+    assert isinstance(driver.engine.pool, QueuePool)
     assert driver.engine.pool.size() == 7
     assert driver.session_factory.kw["bind"] is driver.engine
 

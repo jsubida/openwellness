@@ -36,10 +36,7 @@ class PGTestWeightArchive(PGBaseEntity, Base):
 @pytest.fixture()
 def repo() -> PGBaseRepository[Weight, PGTestWeight]:
     engine = create_engine("sqlite://")
-    Base.metadata.create_all(
-        engine,
-        tables=[PGTestWeight.__table__, PGTestWeightArchive.__table__],
-    )
+    Base.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
     return PGBaseRepository(
         session_factory=session_factory,
@@ -49,10 +46,15 @@ def repo() -> PGBaseRepository[Weight, PGTestWeight]:
     )
 
 
-def _weight(**overrides) -> Weight:
-    defaults = dict(owner="p1", study_id="s1", weight=180.5)
-    defaults.update(overrides)
-    return Weight(**defaults)
+def _weight(
+    *, id: str | None = None, owner: str = "p1", created_at: float | None = None
+) -> Weight:
+    kwargs: dict = {"owner": owner, "study_id": "s1", "weight": 180.5}
+    if id is not None:
+        kwargs["id"] = id
+    if created_at is not None:
+        kwargs["created_at"] = created_at
+    return Weight(**kwargs)
 
 
 def test_create_and_get_by_id(repo):
@@ -153,10 +155,7 @@ def test_archive_copies_row_and_leaves_original(repo):
 
 def test_archive_missing_raises():
     engine = create_engine("sqlite://")
-    Base.metadata.create_all(
-        engine,
-        tables=[PGTestWeight.__table__, PGTestWeightArchive.__table__],
-    )
+    Base.metadata.create_all(engine)
     repo = PGBaseRepository(
         session_factory=sessionmaker(bind=engine),
         entity_type=Weight,

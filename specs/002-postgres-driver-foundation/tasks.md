@@ -39,13 +39,13 @@ Rules:
       `get_by_query` range-filter case (proving the where-clause approach
       handles a `created_at BETWEEN` style query, the Phase-3-critical case
       from `CBWeightRepository.get_for_owner_between`). _(Story 2)_
-- [ ] 7. Set up `backend/core/alembic.ini` + `backend/core/alembic/env.py`,
+- [x] 7. Set up `backend/core/alembic.ini` + `backend/core/alembic/env.py`,
       sourcing the DB URL from `PostgresSettings().get_url()` (Phase 1) rather
       than a hardcoded connection string. _(Story 3)_
-- [ ] 8. Generate `backend/core/alembic/versions/0001_initial.py` creating the
+- [x] 8. Generate `backend/core/alembic/versions/0001_initial.py` creating the
       example `_pg_foundation_smoke` table and its `_pg_foundation_smoke_archive`
       companion, matching the shared shape. _(Story 3)_
-- [ ] 9. Add `backend/core/tests/integration/test_pg_migration_smoke.py`:
+- [x] 9. Add `backend/core/tests/integration/test_pg_migration_smoke.py`:
       spins up `testcontainers.postgres.PostgresContainer`, runs
       `alembic upgrade head`, performs a full
       create/get/save/delete/archive/unarchive cycle through
@@ -53,7 +53,7 @@ Rules:
       `alembic downgrade base`, tears down. Skip cleanly
       (`pytest.mark.skipif` / catch container-start `DockerException`) when
       Docker is unavailable. _(Story 3, Story 4)_
-- [ ] 10. Run `cd backend/core && uv run pytest` (confirm the integration
+- [x] 10. Run `cd backend/core && uv run pytest` (confirm the integration
       test either passes or skips depending on local Docker availability) and
       `cd backend && uv run pyright`; fix any type errors from the new
       SQLAlchemy-typed code. _(all stories)_

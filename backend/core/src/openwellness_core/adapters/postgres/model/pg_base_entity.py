@@ -11,21 +11,25 @@ independent representation.
 
 import dataclasses
 from datetime import datetime, timezone
-from typing import Any, Type, TypeVar
+from typing import Any, Self, Type, TypeVar
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String
+from sqlalchemy import JSON, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import declarative_base, declarative_mixin
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 E = TypeVar("E")
-
-Base = declarative_base()
 
 _PROMOTED_COLUMNS: tuple[str, ...] = ("id", "owner", "created_at", "updated_at")
 
 
+class Base(DeclarativeBase):
+    """Shared declarative base for all Postgres persistence classes."""
+
+
 def _serialize_entity(entity: Any) -> dict:
-    return dataclasses.asdict(entity) if dataclasses.is_dataclass(entity) else vars(entity)
+    if dataclasses.is_dataclass(entity) and not isinstance(entity, type):
+        return dataclasses.asdict(entity)
+    return dict(vars(entity))
 
 
 def _coerce_datetime(value: Any) -> Any:
@@ -34,25 +38,44 @@ def _coerce_datetime(value: Any) -> Any:
     return value
 
 
-@declarative_mixin
 class PGBaseEntity:
     """Shared JSONB-first column shape for all Postgres-backed entities."""
 
-    # Plain (unannotated) `Column` assignments, matching the other two
-    # backends' persistence bases — annotating these would make SQLAlchemy
-    # 2.0 treat them as `Mapped[]`-style declarations, which plain `Column`
-    # values aren't.
-    id = Column(String, primary_key=True)
-    owner = Column(String, nullable=True, index=True)
-    created_at = Column(DateTime(timezone=True), nullable=True)
-    updated_at = Column(DateTime(timezone=True), nullable=True)
-    revision = Column(Integer, nullable=False, default=0)
+    id: Mapped[str] = mapped_column(primary_key=True)
+    owner: Mapped[str | None] = mapped_column(index=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision: Mapped[int] = mapped_column(default=0)
     # SQLite (used by the unit test suite as a fake backing store) can't
     # compile the Postgres-only JSONB type, so it falls back to portable JSON.
-    data = Column(JSONB().with_variant(JSON(), "sqlite"), nullable=False)
+    data: Mapped[dict] = mapped_column(JSONB().with_variant(JSON(), "sqlite"))
+
+    # Explicit signature (SQLAlchemy would otherwise generate one at runtime
+    # only) so type checkers can see the constructor kwargs through the
+    # `Persistence` TypeVar bound to this mixin, e.g. in
+    # `PGBaseRepository.archive()`. Assigns instrumented attributes directly
+    # rather than delegating to `super().__init__()`, since this mixin has no
+    # declared base of its own — `DeclarativeBase` only enters the MRO once a
+    # concrete subclass mixes this in (e.g. `class Foo(PGBaseEntity, Base)`).
+    def __init__(
+        self,
+        *,
+        id: str,
+        owner: str | None = None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+        revision: int = 0,
+        data: dict,
+    ) -> None:
+        self.id = id
+        self.owner = owner
+        self.created_at = created_at
+        self.updated_at = updated_at
+        self.revision = revision
+        self.data = data
 
     @classmethod
-    def from_domain(cls, entity: Any) -> "PGBaseEntity":
+    def from_domain(cls, entity: Any) -> Self:
         kwargs: dict[str, Any] = {"data": _serialize_entity(entity)}
         for name in _PROMOTED_COLUMNS:
             if not hasattr(entity, name):

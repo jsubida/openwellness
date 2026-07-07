@@ -29,7 +29,7 @@ class PGBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
         session_factory: sessionmaker[Session],
         entity_type: Type[Entity],
         persistence_type: Type[Persistence],
-        archive_persistence_type: Type[Persistence],
+        archive_persistence_type: Type[PGBaseEntity],
     ) -> None:
         self.session_factory = session_factory
         self.entity_type = entity_type
