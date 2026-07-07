@@ -13,7 +13,7 @@ from couchbase.cluster import Cluster
 
 from ...adapters.interfaces.entity_repository import EntityRepository
 from ...domain.exceptions.domain_exception import NotFound
-from ..config.app_config import AppConfigInterface
+from ..config.app_config import CouchbaseConfig, SyncGatewayConfig
 
 
 class CBEntityRepository(EntityRepository):
@@ -29,22 +29,26 @@ class CBEntityRepository(EntityRepository):
     class GenericException(Exception):
         """Generic exception class."""
 
-    def __new__(cls, config: AppConfigInterface) -> CBEntityRepository:
+    def __new__(
+        cls, couchbase: CouchbaseConfig, sync_gateway: SyncGatewayConfig
+    ) -> CBEntityRepository:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, config: AppConfigInterface) -> None:
+    def __init__(
+        self, couchbase: CouchbaseConfig, sync_gateway: SyncGatewayConfig
+    ) -> None:
         if self._initialized:
             return
         self._initialized = True
 
-        self.connection_string = config.couchbase.url
-        self.username = config.couchbase.username
-        self.password = config.couchbase.password
-        self.bucket_name = config.couchbase.bucket_name
-        self.sync_gateway_url = config.sync_gateway.get_url()
+        self.connection_string = couchbase.url
+        self.username = couchbase.username
+        self.password = couchbase.password
+        self.bucket_name = couchbase.bucket_name
+        self.sync_gateway_url = sync_gateway.get_url()
         self._cluster: Cluster | None = None
         self._bucket = None
 

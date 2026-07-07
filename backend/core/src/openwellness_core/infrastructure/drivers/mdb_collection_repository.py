@@ -3,17 +3,16 @@
 from pymongo import MongoClient
 
 from ...adapters.interfaces.collection_repository import CollectionRepository
-from ..config.app_config import AppConfigInterface
+from ..config.app_config import MongoConfig
 
 
 class MDBCollectionRepository(CollectionRepository):
     """Thin wrapper around a pymongo database handle."""
 
-    def __init__(self, config: AppConfigInterface) -> None:
+    def __init__(self, mongo: MongoConfig) -> None:
         super().__init__()
-        mdb_config = config.mongo
-        mongo = MongoClient(mdb_config.get_url())
-        self.db = getattr(mongo, mdb_config.db)
+        mongo_client = MongoClient(mongo.get_url())
+        self.db = getattr(mongo_client, mongo.db)
 
     def __getattr__(self, name):
         return getattr(self.db, name)

@@ -40,6 +40,15 @@ class MongoConfig(Protocol):
     def db(self) -> str: ...
 
 
+class PostgresConfig(Protocol):
+    """PostgreSQL connection details. Not yet consumed by any driver."""
+
+    def get_url(self) -> str: ...
+
+    @property
+    def pool_size(self) -> int: ...
+
+
 class AppConfigInterface(ABC):
     """Minimal configuration interface required by core drivers."""
 
@@ -57,3 +66,13 @@ class AppConfigInterface(ABC):
     @abstractmethod
     def mongo(self) -> MongoConfig:
         """Get the MongoDB configuration."""
+
+    @property
+    @abstractmethod
+    def postgres(self) -> PostgresConfig:
+        """Get the PostgreSQL configuration."""
+
+    @property
+    @abstractmethod
+    def storage_backend(self) -> str:
+        """Get the selected storage backend (``couchbase-mongo`` or ``postgres``)."""

@@ -134,8 +134,14 @@ class RepositoryContainer(DeclarativeContainer):
 
     # Drivers. ``CBEntityRepository.__new__`` enforces single-instance, so
     # using ``DIFactory`` here is still effectively singleton.
-    entity_repository = DIFactory(CBEntityRepository, config=app_config)
-    collection_repository = DIFactory(MDBCollectionRepository, config=app_config)
+    entity_repository = DIFactory(
+        CBEntityRepository,
+        couchbase=app_config.provided.couchbase,
+        sync_gateway=app_config.provided.sync_gateway,
+    )
+    collection_repository = DIFactory(
+        MDBCollectionRepository, mongo=app_config.provided.mongo
+    )
 
     # Couchbase-backed repositories
     actigraph_record = DIFactory(
