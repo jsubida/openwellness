@@ -1,6 +1,6 @@
 # Requirements: PostgreSQL Driver Foundation
 
-Status: approved
+Status: done
 Created: 2026-07-06
 
 ## Summary
