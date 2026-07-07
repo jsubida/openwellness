@@ -60,7 +60,7 @@ Rules:
       `backend/scheduler/src/openwellness_scheduler/config.py` and
       `backend/scheduler/tests/test_app_config.py` — same shape, `CelerySettings`
       untouched. _(Story 2, Story 3)_
-- [ ] 10. Update `.env.example` at the repo root: add a new section with
+- [x] 10. Update `.env.example` at the repo root: add a new section with
       `STORAGE_BACKEND`, `POSTGRES_URL`, `POSTGRES_POOL_SIZE`, with a comment
       noting Postgres has no driver yet as of this phase and both vars are
       only required when `STORAGE_BACKEND=postgres`. _(Story 4)_
