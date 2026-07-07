@@ -7,44 +7,29 @@ so it can be passed straight to the core drivers.
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from openwellness_core.infrastructure.config import (
+    CouchbaseSettings,
+    MongoSettings,
+    PostgresSettings,
+    StorageBackendSettings,
+    SyncGatewaySettings,
+)
 from openwellness_core.infrastructure.config.app_config import AppConfigInterface
-
-
-class CouchbaseSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="COUCHBASE_", extra="ignore")
-
-    url: str = "couchbase://localhost"
-    username: str = "Administrator"
-    password: str = "password"
-    bucket_name: str = "openwellness"
-
-
-class SyncGatewaySettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SYNC_GATEWAY_", extra="ignore")
-
-    url: str = "http://localhost:4984/openwellness"
-
-    def get_url(self) -> str:
-        return self.url
-
-
-class MongoSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="MONGO_", extra="ignore")
-
-    url: str = "mongodb://localhost:27017"
-    db: str = "openwellness"
-
-    def get_url(self) -> str:
-        return self.url
 
 
 class AppConfig(AppConfigInterface):
     """Concrete config — composes core's protocol-typed sub-settings."""
 
     def __init__(self) -> None:
+        self._storage = StorageBackendSettings()
         self._couchbase = CouchbaseSettings()
         self._sync_gateway = SyncGatewaySettings()
         self._mongo = MongoSettings()
+        self._postgres = PostgresSettings()
+        if self._storage.storage_backend == "postgres" and not self._postgres.url:
+            raise ValueError(
+                "STORAGE_BACKEND=postgres requires POSTGRES_URL to be set"
+            )
 
     @property
     def couchbase(self) -> CouchbaseSettings:
@@ -57,6 +42,14 @@ class AppConfig(AppConfigInterface):
     @property
     def mongo(self) -> MongoSettings:
         return self._mongo
+
+    @property
+    def postgres(self) -> PostgresSettings:
+        return self._postgres
+
+    @property
+    def storage_backend(self) -> str:
+        return self._storage.storage_backend
 
 
 class APISettings(BaseSettings):

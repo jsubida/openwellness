@@ -42,7 +42,7 @@ Rules:
       `collection_repository = DIFactory(MDBCollectionRepository, mongo=app_config.mongo)`.
       Run `cd backend/core && uv run pytest` to confirm nothing else references
       the old `config=` kwarg. _(Story 1)_
-- [ ] 7. Rewrite `backend/api/src/openwellness_api/config.py`: delete the
+- [x] 7. Rewrite `backend/api/src/openwellness_api/config.py`: delete the
       duplicated `CouchbaseSettings`/`SyncGatewaySettings`/`MongoSettings`;
       import the shared classes from `openwellness_core.infrastructure.config`;
       `AppConfig.__init__` composes them plus `PostgresSettings` and
