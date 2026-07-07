@@ -35,7 +35,7 @@ Rules:
       `backend/core/.../infrastructure/drivers/mdb_collection_repository.py` to
       take `mongo: MongoConfig` instead of `config: AppConfigInterface`. Add a
       unit test constructing it with a minimal fake `MongoConfig`. _(Story 1)_
-- [ ] 6. Update `RepositoryContainer` in
+- [x] 6. Update `RepositoryContainer` in
       `backend/core/.../infrastructure/containers/repository_container.py`:
       `entity_repository = DIFactory(CBEntityRepository, couchbase=app_config.couchbase, sync_gateway=app_config.sync_gateway)`
       and
