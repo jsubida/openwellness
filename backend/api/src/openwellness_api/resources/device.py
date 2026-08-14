@@ -46,7 +46,7 @@ def build_router() -> APIRouter:
     ) -> Any:
         payload = body.model_dump(exclude_unset=False)
         return serialize_one(
-            repo.create(DeviceEntity(**payload)),
+            repo.create(DeviceEntity(**payload), actor=principal.id),
             Device,
             collection=_COLLECTION,
         )
@@ -69,15 +69,17 @@ def build_router() -> APIRouter:
         entity = _fetch(device, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity), Device, collection=_COLLECTION
+            repo.save(entity, actor=principal.id), Device, collection=_COLLECTION
         )
 
     @router.delete("/{device}", status_code=204)
     def delete(
-        device: str, repo: DeviceRepository = Depends(repo_dep)
+        device: str,
+        principal: Principal = Depends(get_principal),
+        repo: DeviceRepository = Depends(repo_dep),
     ) -> None:
         _fetch(device, repo)
-        repo.archive(device)
+        repo.archive(device, actor=principal.id)
         return None
 
     @router.post("/{device}:undelete", response_model=Device)

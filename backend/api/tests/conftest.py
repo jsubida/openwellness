@@ -43,16 +43,32 @@ from openwellness_core.domain.models.user import User
 
 
 class InMemoryBaseRepo:
-    """Dict-backed implementation of ``BaseCrudRepository``."""
+    """Dict-backed implementation of ``BaseCrudRepository``.
+
+    ``create``/``save``/``archive`` take the same required keyword-only
+    ``actor`` as the real contract, and they RECORD it in ``actor_log``
+    rather than dropping it. A fake that accepted the parameter and threw
+    it away would type-check and pass every existing test while making
+    attribution permanently unassertable at the HTTP boundary — which is
+    the one seam the per-layer proofs in 08-06/08-07 do not cover.
+    """
 
     def __init__(self) -> None:
         self.store: dict[str, Any] = {}
         self.archived: dict[str, Any] = {}
+        # (operation, entity_id, actor) for every write, in call order.
+        self.actor_log: list[tuple[str, str, str]] = []
 
-    def create(self, entity: Any) -> Any:
+    @property
+    def last_actor(self) -> str | None:
+        """The actor named by the most recent write, or ``None``."""
+        return self.actor_log[-1][2] if self.actor_log else None
+
+    def create(self, entity: Any, *, actor: str) -> Any:
         if not getattr(entity, "id", None):
             entity.id = str(uuid4())
         self.store[entity.id] = entity
+        self.actor_log.append(("create", entity.id, actor))
         return entity
 
     def get_by_id(self, entity_id: str) -> Any | None:
@@ -67,18 +83,20 @@ class InMemoryBaseRepo:
     def execute_query(self, query: Any) -> Any:
         return self.store.values()
 
-    def save(self, entity: Any) -> Any:
+    def save(self, entity: Any, *, actor: str) -> Any:
         self.store[entity.id] = entity
+        self.actor_log.append(("save", entity.id, actor))
         return entity
 
     def delete(self, entity_id: str) -> None:
         self.store.pop(entity_id, None)
 
-    def archive(self, entity_id: str) -> None:
+    def archive(self, entity_id: str, *, actor: str) -> None:
         entity = self.store.get(entity_id)
         if entity is None:
             raise EntityNotFoundException(f"{entity_id} not found")
         self.archived[entity_id] = entity
+        self.actor_log.append(("archive", entity_id, actor))
 
     def unarchive(self, entity_id: str) -> None:
         self.archived.pop(entity_id, None)

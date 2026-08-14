@@ -46,7 +46,7 @@ def build_router() -> APIRouter:
         repo: ConversationRepository = Depends(repo_dep),
     ) -> Any:
         entity = ConversationEntity(**body.model_dump(exclude_unset=False))
-        return serialize_one(repo.create(entity), Conversation, collection=_COLLECTION)
+        return serialize_one(repo.create(entity, actor=principal.id), Conversation, collection=_COLLECTION)
 
     @router.get("/{conversation}", response_model=Conversation)
     def get(
@@ -66,15 +66,17 @@ def build_router() -> APIRouter:
         entity = _fetch(conversation, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity), Conversation, collection=_COLLECTION
+            repo.save(entity, actor=principal.id), Conversation, collection=_COLLECTION
         )
 
     @router.delete("/{conversation}", status_code=204)
     def delete(
-        conversation: str, repo: ConversationRepository = Depends(repo_dep)
+        conversation: str,
+        principal: Principal = Depends(get_principal),
+        repo: ConversationRepository = Depends(repo_dep),
     ) -> None:
         _fetch(conversation, repo)
-        repo.archive(conversation)
+        repo.archive(conversation, actor=principal.id)
         return None
 
     @router.post("/{conversation}:undelete", response_model=Conversation)

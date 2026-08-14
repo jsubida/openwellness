@@ -78,7 +78,7 @@ def build_router() -> APIRouter:
         repo: ConditionRepository = Depends(repo_dep),
     ) -> Any:
         return serialize_one(
-            repo.create(_build_condition(body, user, principal)),
+            repo.create(_build_condition(body, user, principal), actor=principal.id),
             Condition,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -106,7 +106,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, condition, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             Condition,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -114,10 +114,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{condition}", status_code=204)
     def delete(
-        user: str, condition: str, repo: ConditionRepository = Depends(repo_dep)
+        user: str,
+        condition: str,
+        principal: Principal = Depends(get_principal),
+        repo: ConditionRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, condition, repo)
-        repo.archive(condition)
+        repo.archive(condition, actor=principal.id)
         return None
 
     @router.post("/{condition}:undelete", response_model=Condition)

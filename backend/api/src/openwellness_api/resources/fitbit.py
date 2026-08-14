@@ -46,7 +46,7 @@ def build_router() -> APIRouter:
     ) -> Any:
         payload = body.model_dump(exclude_unset=False)
         return serialize_one(
-            repo.create(FitbitEntity(**payload)),
+            repo.create(FitbitEntity(**payload), actor=principal.id),
             Fitbit,
             collection=_COLLECTION,
         )
@@ -69,15 +69,17 @@ def build_router() -> APIRouter:
         entity = _fetch(fitbit, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity), Fitbit, collection=_COLLECTION
+            repo.save(entity, actor=principal.id), Fitbit, collection=_COLLECTION
         )
 
     @router.delete("/{fitbit}", status_code=204)
     def delete(
-        fitbit: str, repo: FitbitRepository = Depends(repo_dep)
+        fitbit: str,
+        principal: Principal = Depends(get_principal),
+        repo: FitbitRepository = Depends(repo_dep),
     ) -> None:
         _fetch(fitbit, repo)
-        repo.archive(fitbit)
+        repo.archive(fitbit, actor=principal.id)
         return None
 
     @router.post("/{fitbit}:undelete", response_model=Fitbit)
