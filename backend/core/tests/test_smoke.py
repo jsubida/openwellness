@@ -109,13 +109,21 @@ def test_cb_archived_writes_archived_type():
 
 
 def test_cb_persistence_owns_routing_fields():
-    """`type`, `rev`/`_rev`, and `channels` are on the persistence layer only."""
+    """`type` is persistence-only; `_rev`/`channels` are domain-level.
+
+    Updated for `specs/004-write-correctness/`: `channels` and `_rev` used to
+    be asserted as persistence-only, which is precisely what made the
+    `valid_fields()` filter drop them on read and silently revoke document
+    access on the next write. Document `type` and collection routing remain
+    persistence concerns.
+    """
     w = Weight(owner="p1", study_id="s1", weight=180.5)
-    # Domain does NOT have these
+    # Document type stays a persistence concern.
     assert not hasattr(w, "type")
-    assert not hasattr(w, "_rev")
-    assert not hasattr(w, "channels")
-    # Persistence DOES have them
+    # Access metadata and revision state are first-class on the domain.
+    assert w.channels is None
+    assert w._rev == ""
+    # Persistence carries its own copies of all three.
     persistence = CBWeight.from_domain(w)
     assert CBWeight.type == "Weight"
     assert persistence.rev == ""
