@@ -65,7 +65,7 @@ def build_router() -> APIRouter:
             principal=principal,
         )
         return serialize_one(
-            repo.create(FitbitSleepSessionEntity(**payload)),
+            repo.create(FitbitSleepSessionEntity(**payload), actor=principal.id),
             FitbitSleepSession,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -93,7 +93,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, fitbit_sleep_session, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             FitbitSleepSession,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -101,10 +101,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{fitbit_sleep_session}", status_code=204)
     def delete(
-        user: str, fitbit_sleep_session: str, repo: FitbitSleepSessionRepository = Depends(repo_dep)
+        user: str,
+        fitbit_sleep_session: str,
+        principal: Principal = Depends(get_principal),
+        repo: FitbitSleepSessionRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, fitbit_sleep_session, repo)
-        repo.archive(fitbit_sleep_session)
+        repo.archive(fitbit_sleep_session, actor=principal.id)
         return None
 
     @router.post("/{fitbit_sleep_session}:undelete", response_model=FitbitSleepSession)

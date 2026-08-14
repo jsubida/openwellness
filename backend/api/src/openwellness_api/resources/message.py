@@ -62,7 +62,7 @@ def build_router() -> APIRouter:
             principal=principal,
         )
         return serialize_one(
-            repo.create(MessageEntity(**payload)),
+            repo.create(MessageEntity(**payload), actor=principal.id),
             Message,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -90,7 +90,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, message, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             Message,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -98,10 +98,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{message}", status_code=204)
     def delete(
-        user: str, message: str, repo: MessageRepository = Depends(repo_dep)
+        user: str,
+        message: str,
+        principal: Principal = Depends(get_principal),
+        repo: MessageRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, message, repo)
-        repo.archive(message)
+        repo.archive(message, actor=principal.id)
         return None
 
     @router.post("/{message}:undelete", response_model=Message)

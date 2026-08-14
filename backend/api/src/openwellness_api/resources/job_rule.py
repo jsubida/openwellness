@@ -65,7 +65,7 @@ def build_router() -> APIRouter:
             principal=principal,
         )
         return serialize_one(
-            repo.create(JobRuleEntity(**payload)),
+            repo.create(JobRuleEntity(**payload), actor=principal.id),
             JobRule,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -93,7 +93,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, job_rule, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             JobRule,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -101,10 +101,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{job_rule}", status_code=204)
     def delete(
-        user: str, job_rule: str, repo: JobRuleRepository = Depends(repo_dep)
+        user: str,
+        job_rule: str,
+        principal: Principal = Depends(get_principal),
+        repo: JobRuleRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, job_rule, repo)
-        repo.archive(job_rule)
+        repo.archive(job_rule, actor=principal.id)
         return None
 
     @router.post("/{job_rule}:undelete", response_model=JobRule)

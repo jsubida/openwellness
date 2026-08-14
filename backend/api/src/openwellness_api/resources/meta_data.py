@@ -65,7 +65,7 @@ def build_router() -> APIRouter:
             principal=principal,
         )
         return serialize_one(
-            repo.create(MetaDataEntity(**payload)),
+            repo.create(MetaDataEntity(**payload), actor=principal.id),
             MetaData,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -93,7 +93,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, meta_data, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             MetaData,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -101,10 +101,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{meta_data}", status_code=204)
     def delete(
-        user: str, meta_data: str, repo: MetaDataRepository = Depends(repo_dep)
+        user: str,
+        meta_data: str,
+        principal: Principal = Depends(get_principal),
+        repo: MetaDataRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, meta_data, repo)
-        repo.archive(meta_data)
+        repo.archive(meta_data, actor=principal.id)
         return None
 
     @router.post("/{meta_data}:undelete", response_model=MetaData)
