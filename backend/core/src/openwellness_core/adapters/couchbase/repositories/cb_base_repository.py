@@ -37,13 +37,6 @@ class _Unset:
 
 _UNSET = _Unset()
 
-# Fallback for the interim actor bridge below. Deliberately the same literal
-# `CBBaseOwnerEntity.updated_by` defaults to, so an entity that never carried
-# an actor writes back the value it would have been stored with anyway rather
-# than inventing a new spelling of "we don't know". Removed with the bridge in
-# 08-07.
-_INTERIM_DEFAULT_ACTOR = "unknown"
-
 
 class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
     """Base Couchbase repository for all entities."""
@@ -168,30 +161,15 @@ class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
             outgoing_channels=outgoing,
         )
 
-    def _interim_actor_from_entity(self, entity: Entity) -> str:
-        """Read the acting identity back off the entity being written.
+    def create(self, entity: Entity, *, actor: str) -> Entity:
+        """Store a new document, recording ``actor`` as the writing identity.
 
-        **Temporary bridge — not the intended design.** 08-06 made ``actor``
-        a required parameter of the driver write port, but this repository
-        does not yet take one of its own, so the value is recovered from the
-        entity's existing ``updated_by`` attribute to keep the layer green in
-        the same commit that widens the port.
-
-        Deriving the actor implicitly from the record being written is
-        precisely what D-15 forbids as an end state: the *caller* knows who
-        acted, and an object that has been round-tripped through storage only
-        knows who acted last. 08-07 replaces this with an explicit ``actor``
-        parameter on the repository write methods and deletes this helper —
-        a test there asserts the symbol is gone. Do not build on it, and do
-        not add call sites.
+        The value is passed straight to the driver, which stamps it onto the
+        document body. It is never read off ``entity``: 08-06's interim
+        entity-derived bridge is deleted, because an entity that came back
+        from storage only knows who wrote it last, not who is writing it now.
         """
-        actor = getattr(entity, "updated_by", "") or ""
-        return actor or _INTERIM_DEFAULT_ACTOR
-
-    def create(self, entity: Entity) -> Entity:
-        result = self.repo.create(
-            self._to_doc(entity), actor=self._interim_actor_from_entity(entity)
-        )
+        result = self.repo.create(self._to_doc(entity), actor=actor)
         return self._from_doc(result)
 
     def execute_query(self, query: str, params: dict | None = None) -> Any:
@@ -249,26 +227,35 @@ class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
         )
         return entity
 
-    def save(self, entity: Entity) -> Entity:
+    def save(self, entity: Entity, *, actor: str) -> Entity:
         """Update the stored document for an existing entity.
+
+        ``actor`` names the identity recorded on the document as the writer;
+        the driver stamps it. Supplied by the caller, never derived from
+        ``entity`` — this is the path the original misattribution ran through.
 
         Enforces the channels invariant before anything leaves the process:
         a write that would clear a previously non-empty `channels` array
         raises :class:`ChannelsInvariantError` and is never sent to the
-        driver. See :meth:`_assert_channels_invariant`.
+        driver. See :meth:`_assert_channels_invariant`. The guard runs before
+        the driver call, so a rejected write also stamps nothing.
         """
         doc = self._to_doc(entity)
         self._assert_channels_invariant(entity, doc)
-        result = self.repo.save(
-            doc, actor=self._interim_actor_from_entity(entity)
-        )
+        result = self.repo.save(doc, actor=actor)
         return self._from_doc(result)
 
     def delete(self, entity_id: str) -> None:
         self.repo.delete(entity_id)
 
-    def archive(self, entity_id: str) -> None:
+    def archive(self, entity_id: str, *, actor: str) -> None:
         """Create an archive copy of an entity, leaving the original in place.
+
+        ``actor`` is stamped onto the archive copy. It cannot be skipped on
+        the grounds that this method re-reads the entity rather than accepting
+        one: the copy is a new document with its own audit field, and the
+        entity it is built from carries whoever last touched the *original*,
+        which is not who is archiving it now.
 
         Deliberately unguarded by :meth:`_assert_channels_invariant`, and the
         absence is a decision rather than an oversight (D-09). This POSTs a
@@ -281,10 +268,7 @@ class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
         entity = self.get_by_id(entity_id)
         if entity is None:
             raise EntityNotFoundException(f"Entity {entity_id} not found")
-        self.repo.create(
-            self._to_doc(entity, archived=True),
-            actor=self._interim_actor_from_entity(entity),
-        )
+        self.repo.create(self._to_doc(entity, archived=True), actor=actor)
 
     def unarchive(self, entity_id: str) -> None:
         """Drop the archive copy of an entity, if one exists.

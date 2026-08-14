@@ -42,10 +42,38 @@ class PGBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
     def _from_row(self, row: Persistence) -> Entity:
         return row.to_domain(self.entity_type)
 
-    def create(self, entity: Entity) -> Entity:
+    def _stamp_actor(self, data: dict, actor: str) -> dict:
+        """Record ``actor`` in the JSONB payload's audit field, where one exists.
+
+        **This backend does stamp**, unlike Mongo. There is no `updated_by`
+        *column* — the promoted columns are `id`/`owner`/`created_at`/
+        `updated_at` — but `data` is the serialized domain entity, so every
+        `BaseOwnerEntity`-derived entity carries `updated_by` inside it and
+        that is the same field the Couchbase backend writes to `updatedBy`.
+        Accepting the value and dropping it here would make the Postgres
+        adapter the one backend where a write is unattributed, which is the
+        divergence T-08-39 is about.
+
+        Keyed on the field's presence rather than an entity-class check: a
+        plain `BaseEntity` has no audit field, and inventing one inside its
+        JSONB payload would put a key in the document that `to_domain` cannot
+        pass back to the dataclass constructor.
+        """
+        if "updated_by" in data:
+            data["updated_by"] = actor
+        return data
+
+    def create(self, entity: Entity, *, actor: str) -> Entity:
+        """Insert a new row, recording ``actor`` in the JSONB payload.
+
+        The id is assigned here when the entity has none, so the actor is the
+        only thing about the row this method does not take from the caller's
+        entity — deliberately, since the entity cannot know who is writing it.
+        """
         if not entity.id:
             entity.id = str(uuid4())
         row = self._to_row(entity)
+        self._stamp_actor(row.data, actor)
         with self.session_factory() as session:
             session.add(row)
             session.commit()
@@ -71,10 +99,18 @@ class PGBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
     def list_all(self) -> list[Entity]:
         return self.get_by_query(true())
 
-    def save(self, entity: Entity) -> Entity:
+    def save(self, entity: Entity, *, actor: str) -> Entity:
+        """Update the row for an existing entity, recording ``actor``.
+
+        Stamped on both branches: an entity with no id is a create (the actor
+        is forwarded, not re-derived), and an id with no stored row is an
+        insert at revision 0. Every path through this method writes a row, so
+        every path attributes it.
+        """
         if not entity.id:
-            return self.create(entity)
+            return self.create(entity, actor=actor)
         row = self._to_row(entity)
+        self._stamp_actor(row.data, actor)
         with self.session_factory() as session:
             existing = session.get(self.persistence_type, entity.id)
             if existing is None:
@@ -101,10 +137,17 @@ class PGBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
             session.commit()
             return entity_id
 
-    def archive(self, entity_id: str) -> None:
+    def archive(self, entity_id: str, *, actor: str) -> None:
         """Copy the row into the `{table}_archive` companion table.
 
         Leaves the original row untouched; archiving is a copy, not a move.
+
+        ``actor`` is recorded on the archive copy only. The payload is copied
+        before stamping precisely so the live row's attribution is not
+        rewritten as a side effect of archiving it — mutating `row.data` in
+        place would edit an object still attached to this session, and whether
+        that reaches the original row would then depend on SQLAlchemy's
+        mutation tracking rather than on anything stated here.
         """
         with self.session_factory() as session:
             row = session.get(self.persistence_type, entity_id)
@@ -116,7 +159,7 @@ class PGBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 revision=row.revision,
-                data=row.data,
+                data=self._stamp_actor(dict(row.data), actor),
             )
             session.merge(archived)
             session.commit()
