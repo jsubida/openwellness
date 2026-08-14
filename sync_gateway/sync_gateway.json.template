@@ -1,0 +1,89 @@
+// ============================================================================
+// sync_gateway.json.template — local integration-test harness config
+//
+// MIRRORS: the production Sync Gateway config running on the CATALYST Lab
+//   Sync Gateway VM (recorded verbatim in opserver
+//   `.planning/todos/pending/verify-production-datastore-topology.md`).
+//   Every value below — database name, bucket name, shared bucket access,
+//   revs limit, timeouts, and the sync function itself — is the production
+//   value, not a convenient default. Fidelity is the point: the failure mode
+//   this harness exists to reproduce (a null `channels` array collapsing
+//   document access to `[doc.owner]`) is a Sync Gateway behavior, so a stub
+//   config or a mock cannot expose it.
+//
+// PINNED TO:
+//   Sync Gateway     2.8.2-1 Community  (legacy, non-bootstrap config format)
+//   Couchbase Server 6.6.0   Community
+//   These two are a coherent, supported pair and match production exactly.
+//   SG 3.0+ requires CBS 6.6.5+ and a different (bootstrap) config format, so
+//   this file is NOT forward-compatible with an SG 3 upgrade.
+//
+// DELIBERATELY EXCLUDED — production `event_handlers.document_changed`:
+//   Production declares four `document_changed` webhooks that POST to the
+//   live CATALYST api host (filtered on doc.type for FitbitHeartRecord,
+//   PhysicalActivity/FitbitRecord, Weight/FitbitWeight, and Post; the exact
+//   URLs are in opserver's verify-production-datastore-topology.md). They are
+//   omitted here ON PURPOSE, not by oversight: including them would make
+//   every local test write attempt an outbound call to a production host, and
+//   the host name is deliberately not written into this file so that a
+//   copy-paste can never resurrect them. Those webhooks are Phase 10's
+//   subject.
+//
+// ENVSUBST NOTE:
+//   This file is rendered by `scripts/render_sync_gateway_config.sh`, which
+//   runs `envsubst`. Every dollar-brace placeholder below is substituted from
+//   `.env`. The sync function currently contains NO `$` character, so envsubst
+//   cannot corrupt it. If you ever add a `$` to the JavaScript (a jQuery-style
+//   identifier, a template literal), write it as a dollar-brace DOLLAR
+//   placeholder — the render script exports DOLLAR='$' for exactly this,
+//   following the convention established by opserver's `environment.sh`.
+//   Note the render script rejects any dollar-brace sequence that survives
+//   substitution, so prose in this header must not contain one either.
+//
+// SECRETS:
+//   No credential is written here. The rendered output
+//   `sync_gateway/sync_gateway.json` is gitignored; this template is tracked.
+// ============================================================================
+{
+  "interface": ":4984",
+  "adminInterface": ":4985",
+  "logging": {
+    "console": {
+      "log_level": "info",
+      "log_keys": ["HTTP", "CRUD", "Import", "Changes"]
+    }
+  },
+  "databases": {
+    "${SYNC_GATEWAY_DB}": {
+      "server": "http://couchbase:8091",
+      "bucket": "spring",
+      "username": "${SYNC_GATEWAY_CB_USER}",
+      "password": "${SYNC_GATEWAY_CB_PASSWORD}",
+      "enable_shared_bucket_access": true,
+      "import_docs": true,
+      "allow_conflicts": false,
+      "num_index_replicas": 0,
+      "revs_limit": 20,
+      "view_query_timeout_secs": 300,
+      "users": {
+        "GUEST": {
+          "disabled": true,
+          "admin_channels": []
+        }
+      },
+      "sync": `
+function(doc, oldDoc) {
+    function isRemoved() { return (isDelete() && oldDoc == null); }
+    function isDelete()  { return (doc._deleted == true); }
+    if (isRemoved()) { return; }
+    var combined = [];
+    combined.push(doc.owner);
+    if (doc.channels != null) {
+        combined = combined.concat(doc.channels);
+    }
+    channel(combined);
+}
+`
+    }
+  }
+}
