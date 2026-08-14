@@ -18,8 +18,13 @@ from openwellness_core.adapters.postgres.model.pg_base_entity import Base, PGBas
 from openwellness_core.adapters.postgres.repositories.pg_base_repository import (
     PGBaseRepository,
 )
+from openwellness_core.application.actors import system_actor
 from openwellness_core.domain.models.weight import Weight
 from openwellness_core.infrastructure.drivers.pg_engine import PGEngineFactory
+
+# Built through the helper, so the value crossing a real Postgres round trip
+# is the same shape a real machine write carries.
+ACTOR = system_actor("pg_migration_smoke")
 
 CORE_DIR = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = CORE_DIR / "alembic.ini"
@@ -87,19 +92,22 @@ def test_full_crud_archive_cycle_against_real_postgres(postgres_url):
         )
 
         w = Weight(owner="p1", study_id="s1", weight=180.5)
-        created = repo.create(w)
+        created = repo.create(w, actor=ACTOR)
         assert created.id == w.id
         fetched = repo.get_by_id(w.id)
         assert fetched is not None
         assert fetched.weight == 180.5
 
         w.weight = 190.0
-        repo.save(w)
+        repo.save(w, actor=ACTOR)
         updated = repo.get_by_id(w.id)
         assert updated is not None
         assert updated.weight == 190.0
+        # The stamped actor survives a real JSONB round trip, not just the
+        # SQLite stand-in the unit suite uses.
+        assert updated.updated_by == ACTOR
 
-        repo.archive(w.id)
+        repo.archive(w.id, actor=ACTOR)
         # Archiving copies the row; the original is untouched.
         assert repo.get_by_id(w.id) is not None
 

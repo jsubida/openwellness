@@ -38,10 +38,19 @@ from openwellness_core.adapters.couchbase.repositories.cb_base_repository import
 from openwellness_core.adapters.interfaces.entity_repository import (
     EntityRepository,
 )
+from openwellness_core.application.actors import system_actor
 from openwellness_core.domain.models.participant_group import ParticipantGroup
 from openwellness_core.domain.models.weight import Weight
 
 BUCKET = "spring"
+
+# Actors are built through the helper rather than spelled inline, so the test
+# corpus demonstrates the intended shape and a grep for the bare namespace
+# prefix in tests finds nothing. Two values, because "the write recorded the
+# actor" is only meaningful if it differs from what the document arrived
+# carrying (`updatedBy: p1` in `_weight_doc`) and from the seeding write.
+ACTOR = system_actor("channels_round_trip")
+SEED_ACTOR = system_actor("channels_round_trip_seed")
 
 # Shaped like a real Sync Gateway revision id (generation-hash), not a
 # placeholder, so a formatting assumption can't hide behind a short string.
@@ -95,9 +104,41 @@ class FakeEntityRepository(EntityRepository):
         return self.docs.pop(doc_id, None)
 
 
+class StampingEntityRepository(FakeEntityRepository):
+    """The same store, plus the one thing the real driver does to a document.
+
+    `CBEntityRepository.create`/`.update` assign `obj["updatedBy"] = actor`
+    before sending the body. Reproducing exactly that — and nothing else —
+    lets the repository-level suite assert on a stored document body without
+    the base fake losing its "returns whatever it was handed" property, which
+    the channels assertions depend on.
+    """
+
+    def create(self, obj: dict, *, actor: str) -> dict:
+        return super().create({**obj, "updatedBy": actor}, actor=actor)
+
+    def update(self, doc_id: str, obj: dict, *, actor: str) -> dict:
+        return super().update(doc_id, {**obj, "updatedBy": actor}, actor=actor)
+
+    def save(self, obj: dict, *, actor: str) -> dict:
+        return super().save({**obj, "updatedBy": actor}, actor=actor)
+
+
 @pytest.fixture()
 def store() -> FakeEntityRepository:
     return FakeEntityRepository()
+
+
+@pytest.fixture()
+def stamping_store() -> StampingEntityRepository:
+    return StampingEntityRepository()
+
+
+@pytest.fixture()
+def stamping_weight_repo(
+    stamping_store: StampingEntityRepository,
+) -> CBBaseRepository[Weight, CBWeight]:
+    return CBBaseRepository(stamping_store, Weight, CBWeight)
 
 
 @pytest.fixture()
@@ -208,16 +249,66 @@ def test_full_round_trip_through_the_store_preserves_both_fields(
     weight_repo, store
 ):
     """document → entity → document → entity, with a save in the middle."""
-    store.create(_weight_doc(), actor="seed")
+    store.create(_weight_doc(), actor=SEED_ACTOR)
 
     entity = weight_repo.get_by_id("w-1")
     assert entity is not None
-    saved = weight_repo.save(entity)
+    saved = weight_repo.save(entity, actor=ACTOR)
 
     assert store.docs["w-1"]["channels"] == CHANNELS
     assert store.docs["w-1"]["_rev"] == REV
     assert saved.channels == CHANNELS
     assert saved._rev == REV
+
+
+# ---------------------------------------------------------------------------
+# The actor reaches the document body (repository half of the proof)
+# ---------------------------------------------------------------------------
+
+
+def test_a_save_writes_the_actor_argument_into_the_document(
+    stamping_weight_repo, stamping_store
+):
+    """The counterpart to the driver-level actor test.
+
+    `tests/infrastructure/drivers/test_cb_entity_repository.py` proves the
+    driver stamps the actor it is given; this proves the repository gives it
+    the actor its own caller supplied. Neither test alone establishes that a
+    value survives from call site to document body — the seam between them is
+    exactly where 08-06's interim bridge silently substituted the entity's
+    own `updatedBy` instead.
+    """
+    stamping_store.create(_weight_doc(), actor=SEED_ACTOR)
+    entity = stamping_weight_repo.get_by_id("w-1")
+    assert entity is not None
+    # The entity knows who wrote it *last*, which is not who is writing it
+    # now. Deriving the actor from this value is the defect being removed.
+    assert entity.updated_by == SEED_ACTOR
+
+    stamping_weight_repo.save(entity, actor=ACTOR)
+
+    assert stamping_store.docs["w-1"]["updatedBy"] == ACTOR
+
+
+def test_an_archive_attributes_the_copy_to_the_archiving_actor(
+    stamping_weight_repo, stamping_store
+):
+    """Archiving writes a new document, so it names who archived it.
+
+    The entity is re-read inside `archive()`, which makes it the easiest
+    place to fall back on the stored `updatedBy` — the exact substitution
+    this plan removes.
+    """
+    stamping_store.create(_weight_doc(), actor=SEED_ACTOR)
+
+    stamping_weight_repo.archive("w-1", actor=ACTOR)
+
+    # The archive copy keeps the entity id and changes only its `type`, and
+    # this fake keys documents by id — so the archived body is what is stored
+    # under "w-1" after the call.
+    archived = stamping_store.docs["w-1"]
+    assert archived["type"] == "WeightArchived"
+    assert archived["updatedBy"] == ACTOR
 
 
 # ---------------------------------------------------------------------------

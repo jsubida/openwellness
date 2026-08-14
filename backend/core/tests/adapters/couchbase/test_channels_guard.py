@@ -37,6 +37,7 @@ from openwellness_core.adapters.couchbase.repositories.cb_base_repository import
     CBBaseRepository,
 )
 from openwellness_core.adapters.exceptions import ChannelsInvariantError
+from openwellness_core.application.actors import system_actor
 from openwellness_core.domain.models.participant_group import ParticipantGroup
 from openwellness_core.domain.models.weight import Weight
 
@@ -50,6 +51,10 @@ from .test_channels_round_trip import (
     _weight_doc,
 )
 
+# Built through the helper, like every other actor in the test corpus.
+ACTOR = system_actor("channels_guard")
+SEED_ACTOR = system_actor("channels_guard_seed")
+
 
 class RecordingEntityRepository(FakeEntityRepository):
     """The round-trip fake, plus a log of every write it was asked to do.
@@ -57,22 +62,30 @@ class RecordingEntityRepository(FakeEntityRepository):
     The rejection tests assert against this log. "The exception was raised"
     and "nothing was written" are different claims, and only the second one
     is the property that matters to a participant's device.
+
+    Actors are recorded alongside the bodies: a guard that raised *after*
+    handing the driver an actor would still leave the log of bodies empty in
+    some plausible implementations, so the two are logged separately.
     """
 
     def __init__(self) -> None:
         super().__init__()
         self.write_calls: list[tuple[str, dict]] = []
+        self.actors: list[str] = []
 
     def create(self, obj: dict, *, actor: str) -> dict:
         self.write_calls.append(("create", dict(obj)))
+        self.actors.append(actor)
         return super().create(obj, actor=actor)
 
     def update(self, doc_id: str, obj: dict, *, actor: str) -> dict:
         self.write_calls.append(("update", dict(obj)))
+        self.actors.append(actor)
         return super().update(doc_id, obj, actor=actor)
 
     def save(self, obj: dict, *, actor: str) -> dict:
         self.write_calls.append(("save", dict(obj)))
+        self.actors.append(actor)
         return super().save(obj, actor=actor)
 
 
@@ -123,7 +136,7 @@ def test_entity_with_no_prior_revision_saves_with_null_channels(
     entity = _unread_weight(channels=None)
     assert entity._rev == ""
 
-    weight_repo.save(entity)
+    weight_repo.save(entity, actor=ACTOR)
 
     assert store.docs["w-1"]["channels"] is None
     assert len(store.write_calls) == 1
@@ -142,7 +155,7 @@ def test_replacing_channels_with_a_different_non_empty_set_is_allowed(
     assert entity.channels == CHANNELS
 
     entity.channels = ["study:s2", "cohort:c9", "role:coach"]
-    weight_repo.save(entity)
+    weight_repo.save(entity, actor=ACTOR)
 
     assert store.docs["w-1"]["channels"] == [
         "study:s2",
@@ -162,7 +175,7 @@ def test_nulling_a_previously_non_empty_channel_set_is_rejected(weight_repo):
     entity.channels = None
 
     with pytest.raises(ChannelsInvariantError):
-        weight_repo.save(entity)
+        weight_repo.save(entity, actor=ACTOR)
 
 
 def test_emptying_a_previously_non_empty_channel_set_is_rejected(weight_repo):
@@ -171,7 +184,7 @@ def test_emptying_a_previously_non_empty_channel_set_is_rejected(weight_repo):
     entity.channels = []
 
     with pytest.raises(ChannelsInvariantError):
-        weight_repo.save(entity)
+        weight_repo.save(entity, actor=ACTOR)
 
 
 def test_a_rejected_write_never_reaches_the_driver(weight_repo, store):
@@ -180,7 +193,7 @@ def test_a_rejected_write_never_reaches_the_driver(weight_repo, store):
     entity.channels = None
 
     with pytest.raises(ChannelsInvariantError):
-        weight_repo.save(entity)
+        weight_repo.save(entity, actor=ACTOR)
 
     assert store.write_calls == []
 
@@ -193,9 +206,35 @@ def test_a_rejected_empty_list_write_never_reaches_the_driver(
     entity.channels = []
 
     with pytest.raises(ChannelsInvariantError):
-        weight_repo.save(entity)
+        weight_repo.save(entity, actor=ACTOR)
 
     assert store.write_calls == []
+
+
+def test_a_rejected_write_stamps_nothing(weight_repo, store):
+    """A rejection must not attribute anything, not even the attempt.
+
+    The guard runs before the driver call, so the actor never leaves the
+    repository. This closes the gap where a guard that stamped the audit
+    field first and raised second would still pass every assertion above:
+    the write log would be empty, the exception would be raised, and the
+    stored document would nonetheless name someone who did not change it.
+    """
+    store.create(_weight_doc(), actor=SEED_ACTOR)
+    seeded = dict(store.docs["w-1"])
+    store.write_calls.clear()
+    store.actors.clear()
+
+    entity = weight_repo._from_doc(_weight_doc())
+    entity.channels = None
+
+    with pytest.raises(ChannelsInvariantError):
+        weight_repo.save(entity, actor=ACTOR)
+
+    assert store.write_calls == []
+    assert store.actors == []
+    assert store.docs["w-1"] == seeded
+    assert store.docs["w-1"]["updatedBy"] != ACTOR
 
 
 def test_the_rejection_carries_the_structured_context_a_caller_needs(
@@ -206,7 +245,7 @@ def test_the_rejection_carries_the_structured_context_a_caller_needs(
     entity.channels = []
 
     with pytest.raises(ChannelsInvariantError) as caught:
-        weight_repo.save(entity)
+        weight_repo.save(entity, actor=ACTOR)
 
     error = caught.value
     assert error.doc_id == "w-1"
@@ -222,7 +261,7 @@ def test_the_rejection_emits_an_alertable_error_log(weight_repo, caplog):
 
     with caplog.at_level(logging.ERROR):
         with pytest.raises(ChannelsInvariantError):
-            weight_repo.save(entity)
+            weight_repo.save(entity, actor=ACTOR)
 
     errors = [r for r in caplog.records if r.levelname == "ERROR"]
     assert len(errors) == 1
@@ -246,7 +285,7 @@ def test_a_document_read_without_channels_may_be_saved_without_them(
     entity = weight_repo._from_doc(doc)
     assert entity.channels is None
 
-    weight_repo.save(entity)
+    weight_repo.save(entity, actor=ACTOR)
 
     assert store.docs["w-1"]["channels"] is None
 
@@ -258,7 +297,7 @@ def test_a_document_read_with_empty_channels_may_be_saved_empty(
     entity = weight_repo._from_doc(_weight_doc(channels=[]))
     assert entity.channels == []
 
-    weight_repo.save(entity)
+    weight_repo.save(entity, actor=ACTOR)
 
     assert store.docs["w-1"]["channels"] == []
 
@@ -280,7 +319,7 @@ def test_an_unread_entity_with_a_prior_revision_cannot_clear_its_channels(
     entity = _unread_weight(_rev=REV, channels=None)
 
     with pytest.raises(ChannelsInvariantError) as caught:
-        weight_repo.save(entity)
+        weight_repo.save(entity, actor=ACTOR)
 
     assert caught.value.doc_id == "w-1"
     assert caught.value.prior_channels is None
@@ -293,7 +332,7 @@ def test_an_unread_entity_may_still_set_a_non_empty_channel_list(
     """Access is being granted, not destroyed, so there is nothing to protect."""
     entity = _unread_weight(_rev=REV, channels=["study:s1"])
 
-    weight_repo.save(entity)
+    weight_repo.save(entity, actor=ACTOR)
 
     assert store.docs["w-1"]["channels"] == ["study:s1"]
 
@@ -311,7 +350,7 @@ def test_a_participant_group_round_trip_is_never_rejected(group_repo, store):
     """
     entity = group_repo._from_doc(_group_doc())
 
-    group_repo.save(entity)
+    group_repo.save(entity, actor=ACTOR)
 
     assert store.docs["pg-1"]["channels"] == ["participantGroup:pg-1"]
     assert len(store.write_calls) == 1
@@ -328,6 +367,6 @@ def test_a_participant_group_with_nulled_channels_still_saves(
     entity = group_repo._from_doc(_group_doc())
     entity.channels = None
 
-    group_repo.save(entity)
+    group_repo.save(entity, actor=ACTOR)
 
     assert store.docs["pg-1"]["channels"] == ["participantGroup:pg-1"]
