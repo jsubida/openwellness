@@ -59,6 +59,9 @@ class FakeUserRepo:
 
     def __init__(self) -> None:
         self._by_id: dict[str, User] = {}
+        # Every actor named at a save, in call order — recorded rather than
+        # dropped so the auth service's attribution stays assertable.
+        self.save_actors: list[str] = []
 
     def add(self, user: User) -> None:
         self._by_id[user.id] = user
@@ -70,8 +73,9 @@ class FakeUserRepo:
         email = query.get("email")
         return [u for u in self._by_id.values() if u.email == email]
 
-    def save(self, user: User) -> User:
+    def save(self, user: User, *, actor: str) -> User:
         self._by_id[user.id] = user
+        self.save_actors.append(actor)
         return user
 
 
@@ -293,6 +297,12 @@ def test_registration_happy_path(ctx: _Ctx) -> None:
     assert claims.sub == UNVERIFIED_USER_ID
     assert ctx.session_doc(cred.refresh_token) is not None
 
+    # The registration write is attributed to the USER, not to a machine
+    # actor: every field it set records something the user did by proving
+    # control of the email. A ``system:`` actor here would read, years later,
+    # as "the platform registered this account", which is not what happened.
+    assert ctx.user_repo.save_actors == [UNVERIFIED_USER_ID]
+
 
 def test_registration_strips_participants_prefix(ctx: _Ctx) -> None:
     outcome = ctx.service.send_registration_code(
@@ -323,7 +333,7 @@ def test_send_login_inactive_user_silent(ctx: _Ctx) -> None:
     # Deactivate the verified user; eligibility must now fail silently.
     user = ctx.user_repo.get_by_id(VERIFIED_USER_ID)
     assert user is not None
-    ctx.user_repo.save(replace(user, is_active=False))
+    ctx.user_repo.save(replace(user, is_active=False), actor="test-setup")
 
     outcome = ctx.service.send_login_code(email=VERIFIED_EMAIL, ip="9.9.9.9")
     assert outcome.message == errors.UNIFORM_SEND_MESSAGE
@@ -360,7 +370,7 @@ def test_send_registration_already_verified_user_silent(ctx: _Ctx) -> None:
     # Mark the participant's user already verified → not eligible to register.
     user = ctx.user_repo.get_by_id(UNVERIFIED_USER_ID)
     assert user is not None
-    ctx.user_repo.save(replace(user, verified_id="already"))
+    ctx.user_repo.save(replace(user, verified_id="already"), actor="test-setup")
 
     outcome = ctx.service.send_registration_code(
         email=UNVERIFIED_EMAIL,
@@ -513,7 +523,7 @@ def test_refresh_inactive_user_401(ctx: _Ctx) -> None:
     cred = _issue_login(ctx)
     user = ctx.user_repo.get_by_id(VERIFIED_USER_ID)
     assert user is not None
-    ctx.user_repo.save(replace(user, is_active=False))
+    ctx.user_repo.save(replace(user, is_active=False), actor="test-setup")
 
     with pytest.raises(HTTPException) as ei:
         ctx.service.refresh_token(raw_refresh=cred.refresh_token)
@@ -636,7 +646,7 @@ def test_registration_email_collision_is_uniform_400(ctx: _Ctx) -> None:
     assert code is not None
 
     # The save() now collides on the unique email index.
-    def _raise_dup(_user: User) -> User:
+    def _raise_dup(_user: User, *, actor: str) -> User:
         raise DuplicateKeyError("dup")
 
     ctx.user_repo.save = _raise_dup  # type: ignore[method-assign]
@@ -669,8 +679,8 @@ class _CountingUserRepo:
         self.calls.append(("get_by_query", query))
         return self._inner.get_by_query(query)
 
-    def save(self, user: User) -> User:
-        return self._inner.save(user)
+    def save(self, user: User, *, actor: str) -> User:
+        return self._inner.save(user, actor=actor)
 
 
 class _CountingParticipantRepo:
@@ -745,7 +755,7 @@ def test_registration_send_query_shape_is_constant() -> None:
     ctx_c = _Ctx()
     user = ctx_c.user_repo.get_by_id(UNVERIFIED_USER_ID)
     assert user is not None
-    ctx_c.user_repo.save(replace(user, verified_id="already"))
+    ctx_c.user_repo.save(replace(user, verified_id="already"), actor="test-setup")
     svc_c, u_c, p_c = _counted_service(ctx_c)
     svc_c.send_registration_code(
         email=UNVERIFIED_EMAIL,

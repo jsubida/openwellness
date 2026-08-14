@@ -473,7 +473,16 @@ class AuthService:
         # account (it was provisioned inactive until the email was verified).
         user.is_active = True
         try:
-            self._user_repo.save(user)
+            # The actor is the user, not a machine: this write is the direct
+            # consequence of THEIR act of proving control of the email, and
+            # every field above records something they did. A system actor
+            # here would read, years later, as "the platform registered this
+            # account", which is not what happened. The credential is minted
+            # a few lines below, so the id is not yet on a Principal — but the
+            # OTP verification IS the authentication event, so naming it is
+            # truthful rather than presumptuous. ``_issue_credential`` already
+            # sets the session's ``created_by`` to the same ``user.id``.
+            self._user_repo.save(user, actor=user.id)
         except DuplicateKeyError:
             # The user collection has a UNIQUE email index; if a DIFFERENT
             # (unverified) user already holds this email, save collides. Map it
