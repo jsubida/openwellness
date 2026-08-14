@@ -14,8 +14,16 @@ their *outcome in the store* rather than by the exception alone:
   partially writing would advance the revision and fail that compare; an
   exception-only assertion would not notice.
 
-The stale-revision conflict case (D-21) and the attribution assertions land in
-this same module next.
+* **The conflict (D-21).** The stale-revision rejection is behavior the `_rev`
+  fix *created* — before 08-04 every update went out with an empty `?rev=`, so
+  no write could ever be stale. It has never run against a Sync Gateway that can
+  actually answer 409. The case here asserts both halves separately: the typed
+  error was raised, *and* the losing write never landed. An adapter that wrote
+  first and raised second would pass the first half.
+
+Two writers, two different fields. If both writers changed the same field,
+"the first write won" and "the second write was rejected" would be
+indistinguishable from one observation of the stored document.
 
 **Nothing is excluded from the document compare.** Sync Gateway 2.8.2's admin
 `GET /{db}/{doc}` returns the stored body plus `_id` and `_rev` only — the
@@ -40,8 +48,11 @@ from typing import Any, Callable
 import pytest
 
 from openwellness_core.adapters.couchbase.model.cb_card import CBCard
-from openwellness_core.adapters.exceptions import ChannelsInvariantError
-from openwellness_core.application.actors import system_actor
+from openwellness_core.adapters.exceptions import (
+    ChannelsInvariantError,
+    RevisionConflictError,
+)
+from openwellness_core.application.actors import is_system_actor, system_actor
 from openwellness_core.domain.models.card import Card
 
 # Built through the helper, so the value crossing a real write is the shape a
@@ -227,3 +238,116 @@ def test_a_legitimate_channel_change_still_reaches_the_store(
     moved.channels = [relocated]
     repo.save(moved, actor=ACTOR)
     assert _capture(admin_read, card.id)["channels"] == [relocated]
+
+
+# ---------------------------------------------------------------------------
+# D-21 — two readers, one winner
+# ---------------------------------------------------------------------------
+
+
+def test_stale_revision_write_raises_and_never_lands(
+    repo_factory, sg_subscriber, sg_documents, admin_read
+):
+    """Two concurrent readers cannot both write.
+
+    The two writers change *different* fields on purpose, so the post-conflict
+    observation is unambiguous: the store must show the first writer's field
+    changed and the second writer's field untouched. If both had changed the
+    same field, "the first write won" and "the second write was rejected"
+    would look identical from the store.
+    """
+    repo = repo_factory(Card, CBCard)
+    card = _card([sg_subscriber.channel])
+    sg_documents(card.id)
+    seeded = repo.save(card, actor=ACTOR)
+
+    # Two independent entity instances of the same stored revision — the
+    # lost-update shape, with one process standing in for two.
+    first = repo.get_by_id(card.id)
+    second = repo.get_by_id(card.id)
+    assert first is not None and second is not None
+    assert first is not second
+    assert first._rev == second._rev == seeded._rev
+
+    first.title = "written by the first reader"
+    winner = repo.save(first, actor=ACTOR)
+    assert winner._rev != seeded._rev, "the winning write must advance the revision"
+
+    second.description = "written by the second reader"
+    with pytest.raises(RevisionConflictError) as raised:
+        repo.save(second, actor=ACTOR)
+
+    error = raised.value
+    assert error.doc_id == card.id
+    # The revision the losing writer actually sent — the one that went stale.
+    assert error.attempted_rev == seeded._rev
+    assert error.attempted_rev != winner._rev
+
+    stored = _capture(admin_read, card.id)
+    # Both halves, separately. The revision is what proves the losing write
+    # never landed independently of any field value.
+    assert stored["_rev"] == winner._rev
+    assert stored["title"] == "written by the first reader"
+    assert stored["description"] == "seed description", (
+        "the losing writer's field change reached the store — the conflict was "
+        "raised after the write rather than instead of it"
+    )
+    # And access is untouched by the conflict.
+    assert stored["channels"] == [sg_subscriber.channel]
+
+
+# ---------------------------------------------------------------------------
+# DATA-04 — attribution against the real store
+# ---------------------------------------------------------------------------
+
+
+def test_machine_actor_reaches_the_real_store_verbatim(
+    repo_factory, sg_subscriber, sg_documents, admin_read
+):
+    """ROADMAP §Phase 8 criterion 4, measured where substitution could hide.
+
+    Asserted on both the seed write and a later update: the driver stamps
+    `updatedBy` on each path separately, and the original defect — the literal
+    `"scheduler"` — lived on exactly one of them.
+    """
+    repo = repo_factory(Card, CBCard)
+    job_actor = system_actor("nightly_participant_rollup")
+    assert job_actor == "system:nightly_participant_rollup"
+
+    card = _card([sg_subscriber.channel])
+    sg_documents(card.id)
+    repo.save(card, actor=job_actor)
+
+    seeded_body = _capture(admin_read, card.id)
+    assert seeded_body["updatedBy"] == job_actor
+    assert is_system_actor(seeded_body["updatedBy"])
+    # Not the entity's own audit field (which `__post_init__` defaults to the
+    # owner) and not a service name: the actor the caller named.
+    assert seeded_body["updatedBy"] != OWNER
+    assert "scheduler" not in seeded_body["updatedBy"]
+
+    reread = repo.get_by_id(card.id)
+    assert reread is not None
+    reread.title = "edited by the job"
+    repo.save(reread, actor=job_actor)
+    assert _capture(admin_read, card.id)["updatedBy"] == job_actor
+
+
+def test_human_principal_id_reaches_the_real_store_verbatim(
+    repo_factory, sg_subscriber, sg_documents, admin_read
+):
+    """A human write stores the principal's id unchanged and unnamespaced."""
+    repo = repo_factory(Card, CBCard)
+    # Shaped like the ids `backend/api` passes through: a Mongo ObjectId hex.
+    principal_id = "6512a7f4c9e14b2d8a3f0011"
+
+    card = _card([sg_subscriber.channel])
+    sg_documents(card.id)
+    repo.save(card, actor=principal_id)
+
+    body = _capture(admin_read, card.id)
+    assert body["updatedBy"] == principal_id
+    assert not is_system_actor(body["updatedBy"]), (
+        "a human principal must not be stored under the machine namespace"
+    )
+    assert body["updatedBy"] != OWNER
