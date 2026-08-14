@@ -73,15 +73,21 @@ class FakeEntityRepository(EntityRepository):
     ) -> list[dict]:
         return [dict(doc) for doc in self.docs.values()]
 
-    def create(self, obj: dict) -> dict:
+    # `actor` is accepted and deliberately not applied to the stored dict.
+    # This fake exists to prove `channels`/`_rev` survive a round trip;
+    # stamping the audit field here would duplicate the driver's job and
+    # make the store no longer "returns whatever it was handed". Actor
+    # stamping is proven against the real driver in
+    # `tests/infrastructure/drivers/test_cb_entity_repository.py`.
+    def create(self, obj: dict, *, actor: str) -> dict:
         self.docs[obj["id"]] = dict(obj)
         return dict(obj)
 
-    def update(self, doc_id: str, obj: dict) -> dict:
+    def update(self, doc_id: str, obj: dict, *, actor: str) -> dict:
         self.docs[doc_id] = dict(obj)
         return dict(obj)
 
-    def save(self, obj: dict) -> dict:
+    def save(self, obj: dict, *, actor: str) -> dict:
         self.docs[obj["id"]] = dict(obj)
         return dict(obj)
 
@@ -202,7 +208,7 @@ def test_full_round_trip_through_the_store_preserves_both_fields(
     weight_repo, store
 ):
     """document → entity → document → entity, with a save in the middle."""
-    store.create(_weight_doc())
+    store.create(_weight_doc(), actor="seed")
 
     entity = weight_repo.get_by_id("w-1")
     assert entity is not None

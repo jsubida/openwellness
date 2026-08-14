@@ -63,17 +63,17 @@ class RecordingEntityRepository(FakeEntityRepository):
         super().__init__()
         self.write_calls: list[tuple[str, dict]] = []
 
-    def create(self, obj: dict) -> dict:
+    def create(self, obj: dict, *, actor: str) -> dict:
         self.write_calls.append(("create", dict(obj)))
-        return super().create(obj)
+        return super().create(obj, actor=actor)
 
-    def update(self, doc_id: str, obj: dict) -> dict:
+    def update(self, doc_id: str, obj: dict, *, actor: str) -> dict:
         self.write_calls.append(("update", dict(obj)))
-        return super().update(doc_id, obj)
+        return super().update(doc_id, obj, actor=actor)
 
-    def save(self, obj: dict) -> dict:
+    def save(self, obj: dict, *, actor: str) -> dict:
         self.write_calls.append(("save", dict(obj)))
-        return super().save(obj)
+        return super().save(obj, actor=actor)
 
 
 @pytest.fixture()

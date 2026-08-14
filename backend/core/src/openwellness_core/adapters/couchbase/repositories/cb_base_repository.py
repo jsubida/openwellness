@@ -37,6 +37,13 @@ class _Unset:
 
 _UNSET = _Unset()
 
+# Fallback for the interim actor bridge below. Deliberately the same literal
+# `CBBaseOwnerEntity.updated_by` defaults to, so an entity that never carried
+# an actor writes back the value it would have been stored with anyway rather
+# than inventing a new spelling of "we don't know". Removed with the bridge in
+# 08-07.
+_INTERIM_DEFAULT_ACTOR = "unknown"
+
 
 class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
     """Base Couchbase repository for all entities."""
@@ -161,8 +168,30 @@ class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
             outgoing_channels=outgoing,
         )
 
+    def _interim_actor_from_entity(self, entity: Entity) -> str:
+        """Read the acting identity back off the entity being written.
+
+        **Temporary bridge — not the intended design.** 08-06 made ``actor``
+        a required parameter of the driver write port, but this repository
+        does not yet take one of its own, so the value is recovered from the
+        entity's existing ``updated_by`` attribute to keep the layer green in
+        the same commit that widens the port.
+
+        Deriving the actor implicitly from the record being written is
+        precisely what D-15 forbids as an end state: the *caller* knows who
+        acted, and an object that has been round-tripped through storage only
+        knows who acted last. 08-07 replaces this with an explicit ``actor``
+        parameter on the repository write methods and deletes this helper —
+        a test there asserts the symbol is gone. Do not build on it, and do
+        not add call sites.
+        """
+        actor = getattr(entity, "updated_by", "") or ""
+        return actor or _INTERIM_DEFAULT_ACTOR
+
     def create(self, entity: Entity) -> Entity:
-        result = self.repo.create(self._to_doc(entity))
+        result = self.repo.create(
+            self._to_doc(entity), actor=self._interim_actor_from_entity(entity)
+        )
         return self._from_doc(result)
 
     def execute_query(self, query: str, params: dict | None = None) -> Any:
@@ -230,7 +259,9 @@ class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
         """
         doc = self._to_doc(entity)
         self._assert_channels_invariant(entity, doc)
-        result = self.repo.save(doc)
+        result = self.repo.save(
+            doc, actor=self._interim_actor_from_entity(entity)
+        )
         return self._from_doc(result)
 
     def delete(self, entity_id: str) -> None:
@@ -250,7 +281,10 @@ class CBBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
         entity = self.get_by_id(entity_id)
         if entity is None:
             raise EntityNotFoundException(f"Entity {entity_id} not found")
-        self.repo.create(self._to_doc(entity, archived=True))
+        self.repo.create(
+            self._to_doc(entity, archived=True),
+            actor=self._interim_actor_from_entity(entity),
+        )
 
     def unarchive(self, entity_id: str) -> None:
         """Drop the archive copy of an entity, if one exists.

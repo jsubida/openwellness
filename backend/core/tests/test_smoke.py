@@ -235,7 +235,7 @@ def test_cb_base_repo_list_all_round_trip():
             super().__init__()
             self._store: list[dict] = []
 
-        def create(self, obj: dict) -> dict:
+        def create(self, obj: dict, *, actor: str) -> dict:
             self._store.append(obj)
             return obj
 

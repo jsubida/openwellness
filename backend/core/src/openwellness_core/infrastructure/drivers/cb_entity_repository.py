@@ -103,9 +103,18 @@ class CBEntityRepository(EntityRepository):
             result = self.cluster.query(query)
         return list(result.rows())
 
-    def create(self, obj: dict) -> dict:
+    def create(self, obj: dict, *, actor: str) -> dict:
+        """Create a document, recording ``actor`` as the writing identity.
+
+        The actor is stamped here as well as in :meth:`update` so a created
+        document and a later edit of it agree on who acted. No ``updatedAt``
+        stamp is added: the entity already carries one from its domain
+        constructor, and a second source of truth for that field would make
+        the two disagree.
+        """
         url = f"{self.sync_gateway_url}/"
         headers = {"Content-type": "application/json", "Accept": "application/json"}
+        obj["updatedBy"] = actor
         obj = self._sanitize(obj)
         response = requests.post(url, json=obj, headers=headers, timeout=10)
         content = response.json()
@@ -122,17 +131,18 @@ class CBEntityRepository(EntityRepository):
         url = f"{self.sync_gateway_url}/{doc_id}?rev={rev_id}"
         return requests.delete(url, timeout=10).json()
 
-    def save(self, obj: dict) -> dict:
+    def save(self, obj: dict, *, actor: str) -> dict:
+        """Dispatch to :meth:`create` or :meth:`update`, threading ``actor``."""
         obj_id = obj.get("id", None)
         if obj_id is None or obj_id == "":
             obj = self._sanitize(obj)
-            return self.create(obj)
-        return self.update(obj["id"], obj)
+            return self.create(obj, actor=actor)
+        return self.update(obj["id"], obj, actor=actor)
 
-    def update(self, doc_id: str, obj: dict) -> dict:
-        """Update an object by its ID. If `_rev` is empty, creates with the given ID."""
+    def update(self, doc_id: str, obj: dict, *, actor: str) -> dict:
+        """Update a document by its ID, recording ``actor`` as the writer."""
         obj["updatedAt"] = time.time()
-        obj["updatedBy"] = "scheduler"
+        obj["updatedBy"] = actor
         rev = obj["_rev"]
         obj = self._sanitize(obj)
         try:
@@ -163,6 +173,13 @@ class CBEntityRepository(EntityRepository):
         return obj
 
     def _sanitize(self, obj: dict) -> dict:
+        # Both keys are removed on purpose: the Sync Gateway REST API takes
+        # the document id in the URL path and the revision in the `?rev=`
+        # query parameter, never in the request body. A body-borne `_rev` is
+        # ignored, so putting it back would silently disable optimistic
+        # concurrency. The historical bug was upstream of here — the read
+        # path dropped `_rev` entirely, so it was always empty by the time
+        # `update` captured it (fixed in 08-04) — not in this removal.
         obj.pop("id", None)
         obj.pop("_rev", None)
         return obj
