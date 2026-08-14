@@ -11,9 +11,20 @@ import requests
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
 
+from ...adapters.exceptions import RevisionConflictError
 from ...adapters.interfaces.entity_repository import EntityRepository
 from ...domain.exceptions.domain_exception import NotFound
 from ..config.app_config import CouchbaseConfig, SyncGatewayConfig
+
+# HTTP status Sync Gateway answers a stale-revision write with.
+_HTTP_CONFLICT = 409
+
+# The `error` value Sync Gateway puts in a conflict response body. Checked
+# independently of the status code: 2.8 is the only authority on which of the
+# two signals it sets for a given rejection, and depending on one alone turns
+# a version quirk into an untyped exception at exactly the moment a caller
+# most needs to tell a conflict apart from everything else.
+_CONFLICT_ERROR = "conflict"
 
 
 class CBEntityRepository(EntityRepository):
@@ -115,10 +126,16 @@ class CBEntityRepository(EntityRepository):
         url = f"{self.sync_gateway_url}/"
         headers = {"Content-type": "application/json", "Accept": "application/json"}
         obj["updatedBy"] = actor
+        # Captured before `_sanitize` removes it, purely so a rejection can
+        # name the document it was about.
+        doc_id = obj.get("id", "") or ""
         obj = self._sanitize(obj)
         response = requests.post(url, json=obj, headers=headers, timeout=10)
         content = response.json()
-        return self._process_response(obj, content)
+        # A create carries no revision, so `sent_rev` stays empty.
+        return self._process_response(
+            obj, content, response.status_code, doc_id=doc_id
+        )
 
     def execute_query(
         self, query: str, params: dict | None = None
@@ -140,7 +157,29 @@ class CBEntityRepository(EntityRepository):
         return self.update(obj["id"], obj, actor=actor)
 
     def update(self, doc_id: str, obj: dict, *, actor: str) -> dict:
-        """Update a document by its ID, recording ``actor`` as the writer."""
+        """Update a document by its ID, recording ``actor`` as the writer.
+
+        The revision travels to Sync Gateway as the ``?rev=`` query
+        parameter, never in the body (see :meth:`_sanitize`). When ``_rev``
+        is empty no revision is sent at all, which Sync Gateway accepts only
+        if no document exists at ``doc_id``; against an existing document it
+        answers with a conflict. Before 08-04 the read path dropped ``_rev``,
+        so *every* update took the empty-revision branch — the reason the
+        previous docstring described this method as "creates with the given
+        ID". That description no longer fits: a document loaded through the
+        repository now carries its revision, so the empty case means a
+        genuinely new document.
+
+        A rejected revision raises
+        :class:`~openwellness_core.adapters.exceptions.RevisionConflictError`
+        and the call stops there. This adapter never re-sends the write on
+        its own and never merges: re-sending the same body under the current
+        revision would overwrite whatever change caused the rejection, which
+        is precisely the data loss this phase exists to prevent (D-20). A
+        caller wanting that behavior re-reads the document, re-applies its
+        change to the fresh state, and calls again — wrapping this error
+        itself.
+        """
         obj["updatedAt"] = time.time()
         obj["updatedBy"] = actor
         rev = obj["_rev"]
@@ -155,13 +194,41 @@ class CBEntityRepository(EntityRepository):
             }
             response = requests.put(url, json=obj, headers=headers, timeout=10)
             content = response.json()
-            return self._process_response(obj, content)
+            # `rev` is the local captured above, not `obj["_rev"]`: the body
+            # no longer carries it by this point.
+            return self._process_response(
+                obj,
+                content,
+                response.status_code,
+                doc_id=doc_id,
+                sent_rev=rev,
+            )
         except TypeError as e:
             obj["id"] = doc_id
             obj["_rev"] = rev
             raise e
 
-    def _process_response(self, obj: dict, resp: dict) -> dict:
+    def _process_response(
+        self,
+        obj: dict,
+        resp: dict,
+        status_code: int,
+        doc_id: str = "",
+        sent_rev: str = "",
+    ) -> dict:
+        """Apply a Sync Gateway write response to ``obj``, or raise.
+
+        A stale revision is narrowed out of the generic error path and given
+        its own type, because it is the one failure a caller can act on
+        differently. Everything else keeps the pre-existing
+        :class:`GenericException` behavior.
+        """
+        if self._is_conflict(resp, status_code):
+            raise RevisionConflictError(
+                doc_id=doc_id or str(resp.get("id", "")),
+                attempted_rev=sent_rev,
+                reason=str(resp.get("reason", "")),
+            )
         if "id" in resp:
             obj["id"] = resp["id"]
         if "rev" in resp:
@@ -171,6 +238,13 @@ class CBEntityRepository(EntityRepository):
                 f"Error: {resp['error']} because {resp['reason']}"
             )
         return obj
+
+    @staticmethod
+    def _is_conflict(resp: dict, status_code: int) -> bool:
+        """True when the response reports a stale revision, on either signal."""
+        if status_code == _HTTP_CONFLICT:
+            return True
+        return str(resp.get("error", "")).strip().lower() == _CONFLICT_ERROR
 
     def _sanitize(self, obj: dict) -> dict:
         # Both keys are removed on purpose: the Sync Gateway REST API takes
