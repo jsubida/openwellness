@@ -64,7 +64,7 @@ def build_router() -> APIRouter:
             principal=principal,
         )
         return serialize_one(
-            repo.create(FitbitRecordEntity(**payload)),
+            repo.create(FitbitRecordEntity(**payload), actor=principal.id),
             FitbitRecord,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -92,7 +92,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, fitbit_record, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             FitbitRecord,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -100,10 +100,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{fitbit_record}", status_code=204)
     def delete(
-        user: str, fitbit_record: str, repo: FitbitRecordRepository = Depends(repo_dep)
+        user: str,
+        fitbit_record: str,
+        principal: Principal = Depends(get_principal),
+        repo: FitbitRecordRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, fitbit_record, repo)
-        repo.archive(fitbit_record)
+        repo.archive(fitbit_record, actor=principal.id)
         return None
 
     @router.post("/{fitbit_record}:undelete", response_model=FitbitRecord)

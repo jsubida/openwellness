@@ -57,7 +57,7 @@ def build_router() -> APIRouter:
             groups=body.groups,
             study_ids=body.study_ids,
         )
-        return serialize_one(repo.create(entity), Admin, collection=_COLLECTION)
+        return serialize_one(repo.create(entity, actor=principal.id), Admin, collection=_COLLECTION)
 
     @router.get("/{admin}", response_model=Admin)
     def get(admin: str, repo: AdminRepository = Depends(repo_dep)) -> Any:
@@ -77,12 +77,16 @@ def build_router() -> APIRouter:
         for key, value in data.items():
             if hasattr(entity, key):
                 setattr(entity, key, value)
-        return serialize_one(repo.save(entity), Admin, collection=_COLLECTION)
+        return serialize_one(repo.save(entity, actor=principal.id), Admin, collection=_COLLECTION)
 
     @router.delete("/{admin}", status_code=204)
-    def delete(admin: str, repo: AdminRepository = Depends(repo_dep)) -> None:
+    def delete(
+        admin: str,
+        principal: Principal = Depends(get_principal),
+        repo: AdminRepository = Depends(repo_dep),
+    ) -> None:
         _fetch(admin, repo)
-        repo.archive(admin)
+        repo.archive(admin, actor=principal.id)
         return None
 
     @router.post("/{admin}:undelete", response_model=Admin)

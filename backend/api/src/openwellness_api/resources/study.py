@@ -46,7 +46,7 @@ def build_router() -> APIRouter:
         repo: StudyRepository = Depends(repo_dep),
     ) -> Any:
         entity = StudyEntity(**body.model_dump(exclude_unset=False))
-        return serialize_one(repo.create(entity), Study, collection=_COLLECTION)
+        return serialize_one(repo.create(entity, actor=principal.id), Study, collection=_COLLECTION)
 
     @router.get("/{study}", response_model=Study)
     def get(study: str, repo: StudyRepository = Depends(repo_dep)) -> Any:
@@ -61,12 +61,16 @@ def build_router() -> APIRouter:
     ) -> Any:
         entity = _fetch(study, repo)
         apply_patch(entity, body, principal=principal)
-        return serialize_one(repo.save(entity), Study, collection=_COLLECTION)
+        return serialize_one(repo.save(entity, actor=principal.id), Study, collection=_COLLECTION)
 
     @router.delete("/{study}", status_code=204)
-    def delete(study: str, repo: StudyRepository = Depends(repo_dep)) -> None:
+    def delete(
+        study: str,
+        principal: Principal = Depends(get_principal),
+        repo: StudyRepository = Depends(repo_dep),
+    ) -> None:
         _fetch(study, repo)
-        repo.archive(study)
+        repo.archive(study, actor=principal.id)
         return None
 
     @router.post("/{study}:undelete", response_model=Study)

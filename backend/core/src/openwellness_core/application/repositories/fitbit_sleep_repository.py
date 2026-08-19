@@ -18,8 +18,14 @@ class FitbitSleepRepository(
     """Interface for the FitbitSleep entity."""
 
     @abstractmethod
-    def create_from(self, d: dict) -> SomeFitbitSleep:
-        """Create a FitbitSleep from a dictionary."""
+    def create_from(self, d: dict, *, actor: str) -> SomeFitbitSleep:
+        """Create a FitbitSleep from a dictionary.
+
+        ``actor`` names the identity recorded on the written document, as on
+        :meth:`BaseCrudRepository.create`, which this method writes through.
+        The dictionary is vendor-supplied data, not an identity — nothing
+        inside ``d`` may be used for this.
+        """
 
     @abstractmethod
     def update_from(self, entity: SomeFitbitSleep, d: dict) -> SomeFitbitSleep:

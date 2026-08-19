@@ -31,10 +31,10 @@ class CBFitbitSleepRepository(
         super().__init__(repo, entity_type, persistence_type)
         self.entity_type = entity_type
 
-    def create_from(self, d: dict) -> SomeFitbitSleep:
+    def create_from(self, d: dict, *, actor: str) -> SomeFitbitSleep:
         data = self._validate_sleep_key_value(d)
         fs = self.init_entity_valid_fields(data)
-        return self.create(fs)
+        return self.create(fs, actor=actor)
 
     def update_from(self, entity: SomeFitbitSleep, d: dict) -> SomeFitbitSleep:
         data = self._validate_sleep_key_value(d)

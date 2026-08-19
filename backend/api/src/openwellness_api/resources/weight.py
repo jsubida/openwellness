@@ -66,7 +66,7 @@ def build_router() -> APIRouter:
         )
         entity = WeightEntity(**payload)
         return serialize_one(
-            repo.create(entity),
+            repo.create(entity, actor=principal.id),
             Weight,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -94,7 +94,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, weight, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             Weight,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -102,10 +102,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{weight}", status_code=204)
     def delete_weight(
-        user: str, weight: str, repo: WeightRepository = Depends(repo_dep)
+        user: str,
+        weight: str,
+        principal: Principal = Depends(get_principal),
+        repo: WeightRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, weight, repo)
-        repo.archive(weight)
+        repo.archive(weight, actor=principal.id)
         return None
 
     @router.post("/{weight}:undelete", response_model=Weight)

@@ -25,3 +25,91 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
   # dashboard / mobile-web: added later as siblings
+
+  # ---------------------------------------------------------------------------
+  # Sync Gateway / Couchbase integration-test harness — NOT part of the default
+  # application stack. These three services exist so the write-correctness
+  # integration suite runs against a real Sync Gateway rather than a mock, at
+  # the exact versions production runs. Bring them up on their own:
+  #
+  #   ./scripts/render_sync_gateway_config.sh
+  #   docker compose up -d couchbase couchbase-init sync-gateway
+  #
+  # `docker compose up` with no service names would start them alongside api,
+  # redis and scheduler; nothing here requires that, and Couchbase is heavy.
+  # ---------------------------------------------------------------------------
+  couchbase:
+    image: couchbase:community-6.6.0
+    platform: linux/amd64   # image is amd64-only; emulated on Apple silicon
+    env_file: .env
+    ports:
+      # Loopback only. The harness uses well-known local credentials and the
+      # admin REST API is unauthenticated-adjacent; it must never be reachable
+      # off this host.
+      - "127.0.0.1:8091-8094:8091-8094"   # admin console / REST / query
+      - "127.0.0.1:11210:11210"           # non-TLS KV
+    volumes:
+      - couchbaseData:/opt/couchbase/var
+    ulimits:
+      nofile:
+        soft: 100000   # Couchbase 6.6 refuses to start below ~70000; the
+        hard: 100000   # failure message does not say so.
+    healthcheck:
+      # /pools returns 200 as soon as the REST service is up, even before
+      # cluster-init — which is exactly the "ready to be provisioned" signal
+      # couchbase-init needs.
+      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://localhost:8091/pools"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 90s   # boots slowly under amd64 emulation
+    restart: unless-stopped
+
+  # One-shot idempotent provisioner: cluster-init, bucket `spring`, user `sgw`.
+  couchbase-init:
+    image: couchbase:community-6.6.0
+    platform: linux/amd64
+    restart: "no"
+    env_file: .env
+    depends_on:
+      couchbase:
+        condition: service_healthy
+    volumes:
+      - ./scripts/couchbase_init.sh:/couchbase_init.sh:ro
+    entrypoint: ["bash", "/couchbase_init.sh"]
+
+  sync-gateway:
+    image: couchbase/sync-gateway:2.8.2-community
+    platform: linux/amd64
+    env_file: .env
+    depends_on:
+      couchbase-init:
+        condition: service_completed_successfully
+    volumes:
+      # /etc/sync_gateway/config.json is the image's default Cmd — confirmed
+      # with `docker image inspect`, NOT assumed. Mounting anywhere else gives
+      # a Sync Gateway that starts on a default config and silently serves the
+      # wrong database, which is the false-green this harness exists to avoid.
+      - ./sync_gateway/sync_gateway.json:/etc/sync_gateway/config.json:ro
+    ports:
+      - "127.0.0.1:4984:4984"   # public interface — the channel-auth boundary
+      # :4985 is the ADMIN interface and is unauthenticated in Sync Gateway 2.x.
+      # Anyone who reaches it owns every document and every user. Loopback only,
+      # always.
+      - "127.0.0.1:4985:4985"
+    healthcheck:
+      # Probed on the ADMIN interface, not the public one. GUEST is disabled to
+      # match production, so an unauthenticated GET of the public database root
+      # correctly answers 401 — which would make a public-interface healthcheck
+      # permanently unhealthy. The admin root returns the database's real state
+      # (including "state": "Online"), so a pass here means the database is
+      # actually serving, not merely that a port is open.
+      test: ["CMD-SHELL", "curl -sf http://localhost:4985/${SYNC_GATEWAY_DB}/ > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  couchbaseData:

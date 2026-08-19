@@ -48,6 +48,9 @@ DerivedData/
 .env
 .env.*
 !.env.example
+# Rendered from sync_gateway/sync_gateway.json.template by
+# scripts/render_sync_gateway_config.sh; carries Couchbase credentials.
+sync_gateway/sync_gateway.json
 
 # IDE
 .idea/

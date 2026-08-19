@@ -94,7 +94,7 @@ def build_router() -> APIRouter:
         payload = body.model_dump(exclude_unset=False)
         payload["study_id"] = ObjectId(study)
         payload = _coerce_object_ids(payload)
-        return _serialize(repo.create(ParticipantEntity(**payload)), study)
+        return _serialize(repo.create(ParticipantEntity(**payload), actor=principal.id), study)
 
     @router.get("/{participant}", response_model=Participant)
     def get(
@@ -118,16 +118,17 @@ def build_router() -> APIRouter:
         for key, value in data.items():
             if hasattr(entity, key):
                 setattr(entity, key, value)
-        return _serialize(repo.save(entity), study)
+        return _serialize(repo.save(entity, actor=principal.id), study)
 
     @router.delete("/{participant}", status_code=204)
     def delete(
         study: str,
         participant: str,
+        principal: Principal = Depends(get_principal),
         repo: ParticipantRepository = Depends(repo_dep),
     ) -> None:
         _fetch(study, participant, repo)
-        repo.archive(participant)
+        repo.archive(participant, actor=principal.id)
         return None
 
     @router.post("/{participant}:undelete", response_model=Participant)

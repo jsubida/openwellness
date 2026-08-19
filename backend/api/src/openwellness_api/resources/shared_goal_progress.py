@@ -64,7 +64,7 @@ def build_router() -> APIRouter:
             principal=principal,
         )
         return serialize_one(
-            repo.create(SharedGoalProgressEntity(**payload)),
+            repo.create(SharedGoalProgressEntity(**payload), actor=principal.id),
             SharedGoalProgress,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -92,7 +92,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, shared_goal_progress, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             SharedGoalProgress,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -100,10 +100,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{shared_goal_progress}", status_code=204)
     def delete(
-        user: str, shared_goal_progress: str, repo: SharedGoalProgressRepository = Depends(repo_dep)
+        user: str,
+        shared_goal_progress: str,
+        principal: Principal = Depends(get_principal),
+        repo: SharedGoalProgressRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, shared_goal_progress, repo)
-        repo.archive(shared_goal_progress)
+        repo.archive(shared_goal_progress, actor=principal.id)
         return None
 
     @router.post("/{shared_goal_progress}:undelete", response_model=SharedGoalProgress)

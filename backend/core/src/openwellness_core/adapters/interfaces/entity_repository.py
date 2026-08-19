@@ -28,16 +28,37 @@ class EntityRepository(ABC):
         """
 
     @abstractmethod
-    def create(self, obj: dict) -> dict:
-        """Create a new object."""
+    def create(self, obj: dict, *, actor: str) -> dict:
+        """Create a new object.
+
+        ``actor`` names the identity recorded on the stored document as the
+        one that performed the write. It is required and keyword-only: the
+        caller knows who acted, the driver does not. Implementations must
+        record the supplied value and must **not** substitute a default,
+        a service name, or a value read back off ``obj``.
+        """
 
     @abstractmethod
-    def update(self, doc_id: str, obj: dict) -> dict:
-        """Update an object by its ID."""
+    def update(self, doc_id: str, obj: dict, *, actor: str) -> dict:
+        """Update an object by its ID.
+
+        ``actor`` names the identity recorded on the stored document as the
+        one that performed the write. It is required and keyword-only: the
+        caller knows who acted, the driver does not. Implementations must
+        record the supplied value and must **not** substitute a default,
+        a service name, or a value read back off ``obj``.
+        """
 
     @abstractmethod
-    def save(self, obj: dict) -> dict:
-        """Save an object."""
+    def save(self, obj: dict, *, actor: str) -> dict:
+        """Save an object.
+
+        ``actor`` names the identity recorded on the stored document as the
+        one that performed the write. It is required and keyword-only: the
+        caller knows who acted, the driver does not. Implementations must
+        record the supplied value and must **not** substitute a default,
+        a service name, or a value read back off ``obj``.
+        """
 
     @abstractmethod
     def delete(self, doc_id: str) -> dict | None:

@@ -40,9 +40,41 @@ class MongoBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
     def _from_doc(self, doc: dict) -> Entity:
         return self.persistence_type.model_validate(doc).to_domain(self.entity_type)
 
-    def create(self, entity: Entity) -> Entity:
+    def _stamp_actor(self, doc: dict, actor: str) -> dict:
+        """Record ``actor`` in the document's audit field, where one exists.
+
+        **Whether this stamps anything depends on the persistence class, and
+        today it stamps nothing.** Only `MongoBaseOwnerEntity` declares
+        `updated_by` (alias `updatedBy`), and no concrete Mongo persistence
+        class derives from it — every `BaseOwnerEntity`-backed entity in the
+        ported subset lives in Couchbase. So in practice the Mongo backend
+        currently *accepts* the actor for interface parity rather than
+        recording it, and that is stated here rather than left for a reader to
+        infer from an unused parameter.
+
+        The condition, rather than an unconditional assignment, is what keeps
+        that honest in both directions: an unconditional stamp would inject an
+        `updatedBy` key into `users`, `studies` and every other collection
+        whose schema has no such field, while a hard-coded no-op would mean
+        the first `BaseOwnerEntity`-backed Mongo collection silently loses its
+        attribution. This way it is stamped by construction the moment a
+        persistence class declares the field.
+        """
+        if "updated_by" in self.persistence_type.model_fields:
+            doc["updatedBy"] = actor
+        return doc
+
+    def create(self, entity: Entity, *, actor: str) -> Entity:
+        """Insert a new document, attributing the write to ``actor``.
+
+        See :meth:`_stamp_actor` for what the Mongo backend does with the
+        value: today, nothing — no concrete Mongo persistence class carries an
+        audit field. The parameter is still required, because the port is the
+        same port the Couchbase backend implements and a backend that could
+        be called without naming an actor is the divergence this phase closes.
+        """
         collection = self.repo[self._collection_name]
-        result = collection.insert_one(self._to_doc(entity))
+        result = collection.insert_one(self._stamp_actor(self._to_doc(entity), actor))
         entity.id = str(result.inserted_id)
         fetched = collection.find_one({"_id": result.inserted_id})
         if fetched is None:
@@ -77,12 +109,19 @@ class MongoBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
     def init_entity_valid_fields(self, data: dict) -> Entity:
         return self._from_doc(data)
 
-    def save(self, entity: Entity) -> Entity:
+    def save(self, entity: Entity, *, actor: str) -> Entity:
+        """Update an existing document, attributing the write to ``actor``.
+
+        Accepted and — today — not recorded, for the reason given on
+        :meth:`_stamp_actor`. An entity with no id is a create, and the actor
+        is forwarded rather than re-derived.
+        """
         if not entity.id:
-            return self.create(entity)
+            return self.create(entity, actor=actor)
         collection = self.repo[self._collection_name]
         collection.update_one(
-            {"_id": ObjectId(entity.id)}, {"$set": self._to_doc(entity)}
+            {"_id": ObjectId(entity.id)},
+            {"$set": self._stamp_actor(self._to_doc(entity), actor)},
         )
         return entity
 
@@ -90,18 +129,25 @@ class MongoBaseRepository(BaseCrudRepository, Generic[Entity, Persistence]):
         collection = self.repo[self._collection_name]
         return collection.delete_one({"_id": ObjectId(entity_id)})
 
-    def archive(self, entity_id: str) -> None:
+    def archive(self, entity_id: str, *, actor: str) -> None:
         """Insert a copy of the entity into the `{collection}_archive` collection.
 
         Leaves the original document in place; archiving is a copy, not a move.
         Callers that want move semantics should call `delete(entity_id)` after
         `archive(entity_id)`.
+
+        ``actor`` attributes the archive copy — the copy is a new document,
+        and the entity it is built from names whoever last edited the
+        original, not whoever archived it. Accepted and, today, not recorded:
+        see :meth:`_stamp_actor`.
         """
         entity = self.get_by_id(entity_id)
         if entity is None:
             raise EntityNotFoundException(f"Entity {entity_id} not found")
         archive_collection_name = f"{self._collection_name}_archive"
-        self.repo[archive_collection_name].insert_one(self._to_doc(entity))
+        self.repo[archive_collection_name].insert_one(
+            self._stamp_actor(self._to_doc(entity), actor)
+        )
 
     def unarchive(self, entity_id: str) -> None:
         """Drop archive copies of an entity from ``{collection}_archive``.

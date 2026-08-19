@@ -64,7 +64,7 @@ def build_router() -> APIRouter:
             principal=principal,
         )
         return serialize_one(
-            repo.create(DailyStateEntity(**payload)),
+            repo.create(DailyStateEntity(**payload), actor=principal.id),
             DailyState,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -92,7 +92,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, daily_state, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             DailyState,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -100,10 +100,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{daily_state}", status_code=204)
     def delete(
-        user: str, daily_state: str, repo: DailyStateRepository = Depends(repo_dep)
+        user: str,
+        daily_state: str,
+        principal: Principal = Depends(get_principal),
+        repo: DailyStateRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, daily_state, repo)
-        repo.archive(daily_state)
+        repo.archive(daily_state, actor=principal.id)
         return None
 
     @router.post("/{daily_state}:undelete", response_model=DailyState)

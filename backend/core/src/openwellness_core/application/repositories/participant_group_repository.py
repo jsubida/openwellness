@@ -20,6 +20,16 @@ class ParticipantGroupRepository(
 
     @abstractmethod
     def create_participant_group(
-        self, owner: str, study_id: str, **kwargs
+        self, owner: str, study_id: str, *, actor: str, **kwargs
     ) -> SomeParticipantGroup:
-        """Create a new ParticipantGroup."""
+        """Create a new ParticipantGroup.
+
+        ``actor`` names the identity recorded on the written document and
+        carries the same contract as :meth:`BaseCrudRepository.create` — this
+        method writes through :meth:`BaseCrudRepository.save`, so leaving it
+        out here would reintroduce an implicit actor one call above the port
+        that forbids one.
+
+        ``owner`` is not that identity: it names the participant the group
+        belongs to, which is frequently not who created it.
+        """

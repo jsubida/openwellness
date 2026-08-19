@@ -124,13 +124,13 @@ class FakeEntityRepository(EntityRepository):
         self.last_params = params or {}
         return []
 
-    def create(self, obj: dict) -> dict:
+    def create(self, obj: dict, *, actor: str) -> dict:
         return obj
 
-    def update(self, doc_id: str, obj: dict) -> dict:
+    def update(self, doc_id: str, obj: dict, *, actor: str) -> dict:
         return obj
 
-    def save(self, obj: dict) -> dict:
+    def save(self, obj: dict, *, actor: str) -> dict:
         return obj
 
     def delete(self, doc_id: str):

@@ -36,9 +36,17 @@ class CBParticipantGroupRepository(
         return self.get_by_id(doc_id)
 
     def create_participant_group(
-        self, owner: str, study_id: str, **kwargs
+        self, owner: str, study_id: str, *, actor: str, **kwargs
     ) -> SomeParticipantGroup:
+        """Build and store a ParticipantGroup, attributing the write to ``actor``.
+
+        ``owner`` and ``actor`` are different things and are kept apart on
+        purpose: ``owner`` is the participant the group belongs to, ``actor``
+        is whoever is creating it — usually a coach, sometimes a job, rarely
+        the owner. Collapsing them would put a plausible-looking value in the
+        audit field that is wrong most of the time.
+        """
         kwargs["owner"] = owner
         kwargs["studyId"] = study_id
         pg = self.init_entity_valid_fields(kwargs)
-        return self.save(pg)
+        return self.save(pg, actor=actor)

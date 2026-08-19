@@ -31,6 +31,8 @@ class CBFitbitRecordRepository(
         fitbit_date: str,
         study_id: str,
         data: ActivityDataInputDTO,
+        *,
+        actor: str,
     ) -> FitbitRecord:
         record = self.entity_type(
             owner=pid,
@@ -48,7 +50,7 @@ class CBFitbitRecordRepository(
             steps=data.steps,
             very_active_minutes=data.very_active_minutes,
         )
-        return self.create(record)
+        return self.create(record, actor=actor)
 
     def get_for_owner(self, owner_id: str, arg: str) -> FitbitRecord | None:
         b = bucket_ident(self.repo.bucket)

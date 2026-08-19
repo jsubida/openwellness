@@ -16,6 +16,7 @@ from openwellness_core.adapters.mongo.model import (
     MongoStudy,
     MongoUser,
 )
+from openwellness_core.application.actors import system_actor
 from openwellness_core.domain.models.base_entity import BaseEntity
 from openwellness_core.domain.models.base_owner_entity import BaseOwnerEntity
 from openwellness_core.domain.models.goal import Goal
@@ -23,6 +24,11 @@ from openwellness_core.domain.models.participant_group import ParticipantGroup
 from openwellness_core.domain.models.study import Study
 from openwellness_core.domain.models.user import User
 from openwellness_core.domain.models.weight import Weight
+
+# Built through the helper rather than spelled inline, so the test corpus
+# itself demonstrates the shape a real machine write carries and a grep for
+# the bare namespace prefix in tests finds nothing.
+SMOKE_ACTOR = system_actor("smoke_test")
 
 
 def _cb_roundtrip(persistence_cls, domain_cls, domain_instance):
@@ -109,13 +115,21 @@ def test_cb_archived_writes_archived_type():
 
 
 def test_cb_persistence_owns_routing_fields():
-    """`type`, `rev`/`_rev`, and `channels` are on the persistence layer only."""
+    """`type` is persistence-only; `_rev`/`channels` are domain-level.
+
+    Updated for `specs/004-write-correctness/`: `channels` and `_rev` used to
+    be asserted as persistence-only, which is precisely what made the
+    `valid_fields()` filter drop them on read and silently revoke document
+    access on the next write. Document `type` and collection routing remain
+    persistence concerns.
+    """
     w = Weight(owner="p1", study_id="s1", weight=180.5)
-    # Domain does NOT have these
+    # Document type stays a persistence concern.
     assert not hasattr(w, "type")
-    assert not hasattr(w, "_rev")
-    assert not hasattr(w, "channels")
-    # Persistence DOES have them
+    # Access metadata and revision state are first-class on the domain.
+    assert w.channels is None
+    assert w._rev == ""
+    # Persistence carries its own copies of all three.
     persistence = CBWeight.from_domain(w)
     assert CBWeight.type == "Weight"
     assert persistence.rev == ""
@@ -201,8 +215,10 @@ def test_mongo_base_repo_list_all_round_trip():
 
     db = _FakeMongoDB()
     repo = MongoUserRepository(db)  # type: ignore[arg-type]
-    repo.create(User(email="a@b.com", username="alice", is_active=True))
-    repo.create(User(email="c@d.com", username="bob", is_active=False))
+    alice = User(email="a@b.com", username="alice", is_active=True)
+    bob = User(email="c@d.com", username="bob", is_active=False)
+    repo.create(alice, actor=SMOKE_ACTOR)
+    repo.create(bob, actor=SMOKE_ACTOR)
 
     all_users = repo.list_all()
     assert len(all_users) == 2
@@ -227,7 +243,7 @@ def test_cb_base_repo_list_all_round_trip():
             super().__init__()
             self._store: list[dict] = []
 
-        def create(self, obj: dict) -> dict:
+        def create(self, obj: dict, *, actor: str) -> dict:
             self._store.append(obj)
             return obj
 
@@ -241,24 +257,22 @@ def test_cb_base_repo_list_all_round_trip():
 
     from openwellness_core.domain.models.asset import Asset
 
-    repo.create(
-        Asset(
-            owner="p1",
-            study_id="s1",
-            title="t1",
-            url="https://example.com/1",
-            source_changed_at=1.0,
-        )
+    first = Asset(
+        owner="p1",
+        study_id="s1",
+        title="t1",
+        url="https://example.com/1",
+        source_changed_at=1.0,
     )
-    repo.create(
-        Asset(
-            owner="p1",
-            study_id="s1",
-            title="t2",
-            url="https://example.com/2",
-            source_changed_at=2.0,
-        )
+    second = Asset(
+        owner="p1",
+        study_id="s1",
+        title="t2",
+        url="https://example.com/2",
+        source_changed_at=2.0,
     )
+    repo.create(first, actor=SMOKE_ACTOR)
+    repo.create(second, actor=SMOKE_ACTOR)
 
     all_assets = repo.list_all()
     assert len(all_assets) == 2

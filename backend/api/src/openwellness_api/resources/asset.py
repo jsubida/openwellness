@@ -65,7 +65,7 @@ def build_router() -> APIRouter:
             principal=principal,
         )
         return serialize_one(
-            repo.create(AssetEntity(**payload)),
+            repo.create(AssetEntity(**payload), actor=principal.id),
             Asset,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -93,7 +93,7 @@ def build_router() -> APIRouter:
         entity = _fetch(user, asset, repo)
         apply_patch(entity, body, principal=principal)
         return serialize_one(
-            repo.save(entity),
+            repo.save(entity, actor=principal.id),
             Asset,
             collection=_COLLECTION,
             parent=_parent_name(user),
@@ -101,10 +101,13 @@ def build_router() -> APIRouter:
 
     @router.delete("/{asset}", status_code=204)
     def delete(
-        user: str, asset: str, repo: AssetRepository = Depends(repo_dep)
+        user: str,
+        asset: str,
+        principal: Principal = Depends(get_principal),
+        repo: AssetRepository = Depends(repo_dep),
     ) -> None:
         _fetch(user, asset, repo)
-        repo.archive(asset)
+        repo.archive(asset, actor=principal.id)
         return None
 
     @router.post("/{asset}:undelete", response_model=Asset)
