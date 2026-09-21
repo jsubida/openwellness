@@ -61,9 +61,15 @@ def build_router() -> APIRouter:
     # By build time (app creation) the container module is fully loaded.
     from ..deps.auth_container import auth_service_dep
 
+    # D-19's zero-exemption count is impossible: these six POST endpoints are
+    # the authentication path, so guarding them creates a bootstrap deadlock.
     router = APIRouter(tags=["auth"])
 
-    @router.post("/auth:sendLoginCode", response_model=UniformSendResponse)
+    @router.post(
+        "/auth:sendLoginCode",
+        response_model=UniformSendResponse,
+        openapi_extra={"x-allow-unauthenticated": True},
+    )
     def send_login_code(
         request: Request,
         body: SendLoginCodeRequest,
@@ -81,7 +87,11 @@ def build_router() -> APIRouter:
             resend_after_seconds=outcome.resend_after_seconds,
         )
 
-    @router.post("/auth:verifyLoginCode", response_model=TokenResponse)
+    @router.post(
+        "/auth:verifyLoginCode",
+        response_model=TokenResponse,
+        openapi_extra={"x-allow-unauthenticated": True},
+    )
     def verify_login_code(
         request: Request,
         body: VerifyLoginCodeRequest,
@@ -104,7 +114,9 @@ def build_router() -> APIRouter:
         )
 
     @router.post(
-        "/auth:sendRegistrationCode", response_model=UniformSendResponse
+        "/auth:sendRegistrationCode",
+        response_model=UniformSendResponse,
+        openapi_extra={"x-allow-unauthenticated": True},
     )
     def send_registration_code(
         request: Request,
@@ -125,7 +137,9 @@ def build_router() -> APIRouter:
         )
 
     @router.post(
-        "/auth:verifyRegistrationCode", response_model=TokenResponse
+        "/auth:verifyRegistrationCode",
+        response_model=TokenResponse,
+        openapi_extra={"x-allow-unauthenticated": True},
     )
     def verify_registration_code(
         request: Request,
@@ -148,7 +162,11 @@ def build_router() -> APIRouter:
             ),
         )
 
-    @router.post("/auth:refreshToken", response_model=RefreshResponse)
+    @router.post(
+        "/auth:refreshToken",
+        response_model=RefreshResponse,
+        openapi_extra={"x-allow-unauthenticated": True},
+    )
     def refresh_token(
         request: Request,
         body: RefreshTokenRequest,
@@ -166,7 +184,11 @@ def build_router() -> APIRouter:
             refresh_token=refreshed.refresh_token,
         )
 
-    @router.post("/auth:revokeToken", response_model=RevokeResponse)
+    @router.post(
+        "/auth:revokeToken",
+        response_model=RevokeResponse,
+        openapi_extra={"x-allow-unauthenticated": True},
+    )
     def revoke_token(
         request: Request,
         body: RevokeTokenRequest,

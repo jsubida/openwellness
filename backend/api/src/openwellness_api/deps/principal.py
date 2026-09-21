@@ -7,10 +7,12 @@ preserves a HARD never-raise contract: a missing/malformed/expired bearer must
 NOT 401 here — it degrades to the legacy ``X-Principal-Id`` (or ``anonymous``)
 stamp so existing routes keep working unchanged.
 
-``require_principal`` is the strict, enforcement-gated dependency new sensitive
-routes opt into. It is the ONLY place a 401 may originate, and only when
-``AuthSettings.enforce_principal`` is True (permissive rollout otherwise: it
-logs a would-be-401 and lets the anonymous principal through).
+``require_principal`` is the strict dependency new sensitive routes opt into.
+``require_write_principal`` is the central method-aware guard for the v1
+router: writes require a verified bearer, and any client-supplied principal
+header is refused. The header rejection precedes the unauthenticated check so
+an unauthenticated forged-header request returns 403 rather than 401 (D-17,
+D-18, D-19).
 
 CIRCULAR-IMPORT NOTE: do NOT import ``auth.errors`` or ``auth.service`` at
 module level — that would create a cycle via ``common.handlers``. The 401
@@ -31,6 +33,9 @@ from fastapi import Depends, Header, HTTPException, Request
 from ..errors.responses import build_error
 
 logger = logging.getLogger(__name__)
+
+WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+ALLOW_UNAUTHENTICATED = "x-allow-unauthenticated"
 
 
 @dataclass(frozen=True)
@@ -103,8 +108,8 @@ def require_principal(
 
     Reads ``AuthSettings.enforce_principal`` off the live auth container (a
     missing container is treated as ``enforce=False`` so this never explodes
-    when the container isn't wired). New sensitive routes opt into this; it is
-    NOT applied to any existing route in this task.
+    when the container isn't wired). New sensitive routes opt into this; the
+    central write hook below is unconditional.
     """
     if principal.is_authenticated:
         return principal
@@ -115,8 +120,6 @@ def require_principal(
         try:
             enforce = bool(auth_container.auth_settings().enforce_principal)
         except Exception:
-            # Defensive: a half-wired container must not turn a permissive
-            # rollout into a hard failure. Treat as enforce=False.
             enforce = False
 
     if enforce:
@@ -125,12 +128,46 @@ def require_principal(
             detail=build_error(401, "UNAUTHENTICATED", "Authentication required."),
         )
 
-    # Permissive rollout: observe would-be-401 traffic before flipping
-    # enforcement per-environment. WARNING is deliberate — during the rollout
-    # window these are a signal we want visible (not filtered out at INFO) so
-    # traffic can be assessed before a route's enforcement is turned on.
     logger.warning(
         "would-be 401: unauthenticated request to %s (enforce off)",
         request.url.path,
     )
+    return principal
+
+
+def _is_exempt(request: Request) -> bool:
+    route = request.scope.get("route")
+    extra = getattr(route, "openapi_extra", None)
+    return bool(extra and extra.get(ALLOW_UNAUTHENTICATED))
+
+
+def require_write_principal(
+    request: Request,
+    principal: Annotated[Principal, Depends(get_principal)],
+) -> Principal:
+    """Require a verified bearer principal on every non-exempt write."""
+    if request.method not in WRITE_METHODS or _is_exempt(request):
+        return principal
+
+    if "x-principal-id" in request.headers:
+        logger.warning(
+            "rejected client principal header for %s %s",
+            request.method,
+            request.url.path,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=build_error(
+                403,
+                "PERMISSION_DENIED",
+                "Client-supplied principal headers are not permitted on writes.",
+            ),
+        )
+
+    if not principal.is_authenticated:
+        raise HTTPException(
+            status_code=401,
+            detail=build_error(401, "UNAUTHENTICATED", "Authentication required."),
+        )
+
     return principal
