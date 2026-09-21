@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from openwellness_core.application.repositories import WeightRepository
 
 
@@ -24,6 +26,18 @@ def _weight_repo(fakes: dict[type, Any]) -> Any:
     return fakes[WeightRepository]
 
 
+# These four assert the pre-R-10 contract (``X-Principal-Id`` names the actor;
+# an unauthenticated write stores ``anonymous``), which 09-02's write guard
+# refuses by design (specs/006-write-route-auth/). They stay as the record of
+# the old behaviour until 09-06 Task 1 inverts them; ``strict`` makes any of
+# them passing again a failure, so the guard cannot silently regress.
+_PRE_R10 = pytest.mark.xfail(
+    strict=True,
+    reason="pre-R-10 contract; inverted by 09-06 Task 1",
+)
+
+
+@_PRE_R10
 def test_create_names_the_requesting_principal(client, fakes) -> None:
     r = client.post(
         "/v1/users/user-1/weights",
@@ -41,6 +55,7 @@ def test_create_names_the_requesting_principal(client, fakes) -> None:
     assert repo.store[weight_id].updated_by == "coach-alice"
 
 
+@_PRE_R10
 def test_patch_names_the_requesting_principal(client, fakes) -> None:
     created = client.post(
         "/v1/users/user-1/weights",
@@ -65,6 +80,7 @@ def test_patch_names_the_requesting_principal(client, fakes) -> None:
     assert repo.store[weight_id].updated_by == "coach-bob"
 
 
+@_PRE_R10
 def test_delete_names_who_archived_the_record(client, fakes) -> None:
     """The delete route had NO identity in scope before this phase (T-08-41).
 
@@ -89,6 +105,7 @@ def test_delete_names_who_archived_the_record(client, fakes) -> None:
     assert repo.actor_log[-1] == ("archive", weight_id, "coach-carol")
 
 
+@_PRE_R10
 def test_unattributed_request_records_anonymous_not_a_service_name(
     client, fakes
 ) -> None:

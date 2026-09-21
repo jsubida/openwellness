@@ -1,12 +1,13 @@
 """Owner-scoped CRUD + owner-mismatch behavior for Weights (AIP wire format)."""
 
 
-def test_weight_owner_scoped_crud(client) -> None:
+def test_weight_owner_scoped_crud(client, auth_headers) -> None:
+    headers = auth_headers("test-principal")
     # Create under user-1
     r = client.post(
         "/v1/users/user-1/weights",
         json={"weight": 180.5},
-        headers={"X-Principal-Id": "test-principal"},
+        headers=headers,
     )
     assert r.status_code == 201, r.text
     created = r.json()
@@ -27,7 +28,9 @@ def test_weight_owner_scoped_crud(client) -> None:
 
     # Patch
     r = client.patch(
-        f"/v1/users/user-1/weights/{weight_id}", json={"weight": 179.0}
+        f"/v1/users/user-1/weights/{weight_id}",
+        json={"weight": 179.0},
+        headers=headers,
     )
     assert r.status_code == 200
     assert r.json()["weight"] == 179.0
@@ -43,29 +46,36 @@ def test_weight_owner_scoped_crud(client) -> None:
     assert body["weights"][0]["name"] == name
 
     # Archive
-    r = client.delete(f"/v1/users/user-1/weights/{weight_id}")
+    r = client.delete(f"/v1/users/user-1/weights/{weight_id}", headers=headers)
     assert r.status_code == 204
 
     # Undelete restores the archived copy.
-    r = client.post(f"/v1/users/user-1/weights/{weight_id}:undelete")
+    r = client.post(
+        f"/v1/users/user-1/weights/{weight_id}:undelete", headers=headers
+    )
     assert r.status_code == 200
     assert r.json()["name"] == name
 
     # Purge (hard delete)
-    r = client.post(f"/v1/users/user-1/weights/{weight_id}:purge")
+    r = client.post(
+        f"/v1/users/user-1/weights/{weight_id}:purge", headers=headers
+    )
     assert r.status_code == 204
     r = client.get(f"/v1/users/user-1/weights/{weight_id}")
     assert r.status_code == 404
 
 
-def test_weight_response_has_resource_name_and_timestamps(client) -> None:
+def test_weight_response_has_resource_name_and_timestamps(
+    client, auth_headers
+) -> None:
     """Confirm the response wire shape: ``name`` is the full resource path,
     ``createTime`` / ``updateTime`` are RFC-3339 strings."""
     r = client.post(
         "/v1/users/u-9/weights",
         json={"weight": 180.0},
-        headers={"X-Principal-Id": "tester"},
+        headers=auth_headers("tester"),
     )
+    assert r.status_code == 201, r.text
     body = r.json()
     assert body["name"].startswith("users/u-9/weights/")
     assert body["createTime"].endswith("Z")
