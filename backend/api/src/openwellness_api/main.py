@@ -26,9 +26,46 @@ logger = logging.getLogger(__name__)
 
 _WIRED_MODULES = [mod.__name__ for mod in RESOURCE_MODULES]
 
+LIVENESS_PATH = "/healthz"
+
+
+class LivenessAccessLogFilter(logging.Filter):
+    """Drop uvicorn access records for the liveness path (D-16).
+
+    uvicorn's access logger formats ``(client_addr, method, full_path,
+    http_version, status_code)``; ``full_path`` may carry a query string, so
+    it is split before comparing. Anything that does not look like an access
+    record passes through untouched.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
+            return args[2].split("?", 1)[0] != LIVENESS_PATH
+        return True
+
+
+_LIVENESS_FILTER = LivenessAccessLogFilter()
+
+
+def install_liveness_access_log_filter() -> None:
+    """Attach the liveness filter to uvicorn's access logger (idempotent)."""
+    logging.getLogger("uvicorn.access").addFilter(_LIVENESS_FILTER)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # D-16: the liveness probe is the same noise class the api submodule's
+    # log-noise cleanup removed for `frame`. Every prober (Compose healthcheck,
+    # edge, `make smokeEdge`, cutover checks) would otherwise write an access
+    # line every ~10 s into a log store held under six-year retention,
+    # drowning the real requests the channels-guard alert queries. Filtering
+    # at the access logger silences all probers at the source; widening the
+    # healthcheck interval would silence one and degrade readiness. Installed
+    # here because the access logger only matters under a real server (the
+    # test fixture never runs the lifespan).
+    install_liveness_access_log_filter()
+
     # --- Auth feature wiring (settings + boot guard) -------------------- #
     auth_container = AuthContainer()
 
@@ -108,7 +145,8 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(build_v1_router())
 
-    @app.get("/healthz", tags=["meta"])
+    # Liveness: its access-log line is filtered at startup (D-16, see lifespan).
+    @app.get(LIVENESS_PATH, tags=["meta"])
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
