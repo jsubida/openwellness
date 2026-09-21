@@ -11,7 +11,17 @@ A router-level dependency is preferred to 188 per-route dependencies because it 
 - D-19's zero-exemption count was factually impossible: the six authentication POST endpoints are the bootstrap path. They are the only exemptions in this phase; Phase 10 adds the six event-handler routes in a reviewed diff.
 - D-17's attachment site is `build_v1_router()`, not `create_app()`, to avoid a false-green test fixture.
 - The 403 branch runs before the 401 branch because a client-supplied principal header is forbidden even when the request is also unauthenticated.
-- The permissive `enforce_principal` rollout flag remains for 09-06, which retires it after the authenticated write path is re-authored and tested.
+- The permissive `enforce_principal` rollout flag was retired in 09-06 after the authenticated write path was re-authored and tested. `AuthSettings` no longer declares it and nothing reads it, so no `API_AUTH_*` environment value can weaken authentication.
+
+## `require_principal` disposition (09-06)
+
+`require_principal` has zero production call sites: every write is covered by `require_write_principal`, and the only callers are its own unit and HTTP tests. It was kept, in the **unconditionally strict** form (verified bearer or 401), rather than removed:
+
+- The write guard deliberately leaves reads open. `require_principal` is the one strict dependency a sensitive *read* route can opt into; removing it would mean re-deriving it the first time a read needs authentication.
+- The third form, silently returning an unauthenticated principal with a "would-be 401" warning, is gone. It was the flag's failure mode and would survive the flag's removal if kept.
+- It no longer takes `Request` or reads the auth container; with no setting to consult, a missing container cannot change its behaviour.
+
+Relaxing enforcement per environment in future requires re-adding a mechanism in a reviewed diff; `test_auth_settings_has_no_permissive_flag` fails if a flag reappears.
 
 ## Affected components
 

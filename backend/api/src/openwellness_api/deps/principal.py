@@ -7,8 +7,9 @@ preserves a HARD never-raise contract: a missing/malformed/expired bearer must
 NOT 401 here — it degrades to the legacy ``X-Principal-Id`` (or ``anonymous``)
 stamp so existing routes keep working unchanged.
 
-``require_principal`` is the strict dependency new sensitive routes opt into.
-``require_write_principal`` is the central method-aware guard for the v1
+``require_principal`` is the unconditionally strict dependency sensitive
+routes (including reads, which the write guard leaves open) opt into; there is
+no setting that relaxes it. ``require_write_principal`` is the central method-aware guard for the v1
 router: writes require a verified bearer, and any client-supplied principal
 header is refused. The header rejection precedes the unauthenticated check so
 an unauthenticated forged-header request returns 403 rather than 401 (D-17,
@@ -101,38 +102,22 @@ def get_principal(
 
 
 def require_principal(
-    request: Request,
     principal: Annotated[Principal, Depends(get_principal)],
 ) -> Principal:
-    """Strict, enforcement-gated principal. The ONLY source of a 401.
+    """Strict principal: a verified bearer, or 401. Unconditional.
 
-    Reads ``AuthSettings.enforce_principal`` off the live auth container (a
-    missing container is treated as ``enforce=False`` so this never explodes
-    when the container isn't wired). New sensitive routes opt into this; the
-    central write hook below is unconditional.
+    The permissive principal-enforcement rollout flag that could turn this
+    into a pass-through (returning an unauthenticated principal with a
+    warning) was retired in 09-06 (R-10, T-09-34): no configuration value may
+    weaken authentication at runtime. Relaxing it again requires a reviewed
+    code change, not an environment variable.
     """
     if principal.is_authenticated:
         return principal
-
-    enforce = False
-    auth_container = getattr(request.app.state, "auth_container", None)
-    if auth_container is not None:
-        try:
-            enforce = bool(auth_container.auth_settings().enforce_principal)
-        except Exception:
-            enforce = False
-
-    if enforce:
-        raise HTTPException(
-            status_code=401,
-            detail=build_error(401, "UNAUTHENTICATED", "Authentication required."),
-        )
-
-    logger.warning(
-        "would-be 401: unauthenticated request to %s (enforce off)",
-        request.url.path,
+    raise HTTPException(
+        status_code=401,
+        detail=build_error(401, "UNAUTHENTICATED", "Authentication required."),
     )
-    return principal
 
 
 def _is_exempt(request: Request) -> bool:
