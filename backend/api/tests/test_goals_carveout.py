@@ -1,8 +1,8 @@
 """Round-trip the Goal discriminated union + AIP-160 ``filter=kind=N``."""
 
 
-def test_create_weekly_and_daily_goals(client) -> None:
-    headers = {"X-Principal-Id": "tester"}
+def test_create_weekly_and_daily_goals(client, auth_headers) -> None:
+    headers = auth_headers("tester")
 
     r = client.post(
         "/v1/users/u-1/goals",
@@ -44,13 +44,14 @@ def test_create_weekly_and_daily_goals(client) -> None:
     assert goals[0]["name"] == daily["name"]
 
 
-def test_filter_rejects_unknown_field(client) -> None:
-    headers = {"X-Principal-Id": "tester"}
-    client.post(
+def test_filter_rejects_unknown_field(client, auth_headers) -> None:
+    headers = auth_headers("tester")
+    r = client.post(
         "/v1/users/u-2/goals",
         json={"kind": 0, "startDate": 1.0},
         headers=headers,
     )
+    assert r.status_code == 201, r.text
     r = client.get("/v1/users/u-2/goals", params={"filter": "weight=10"})
     assert r.status_code == 400
     assert r.json()["error"]["status"] == "INVALID_ARGUMENT"

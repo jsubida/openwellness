@@ -10,8 +10,8 @@ never leaves the email body otherwise).
 Every test relies on the function-scoped ``app``/``client`` fixtures, so each
 gets a fresh fakeredis + mongomock — no rate-limit/lockout bleed across tests.
 
-The ``require_principal`` HTTP cases (enforce on/off) build their OWN small
-FastAPI app so they don't pollute the main app's permissive auth container.
+The ``require_principal`` HTTP cases build their OWN small FastAPI app so the
+probe route stays isolated from the main app's router.
 """
 
 from __future__ import annotations
@@ -514,18 +514,17 @@ def test_no_code_or_raw_email_in_logs(
 # --------------------------------------------------------------------------- #
 # 14 & 15. require_principal at the HTTP layer (dedicated probe app)
 # --------------------------------------------------------------------------- #
-def _build_probe_app(*, enforce_principal: bool) -> tuple[FastAPI, JwtTokenService]:
+def _build_probe_app() -> tuple[FastAPI, JwtTokenService]:
     """A minimal app with one ``require_principal``-guarded probe route.
 
-    Built standalone (NOT the conftest app) so the enforce-on/off toggle is
-    isolated. The auth_settings and token_service share one settings instance,
-    so signing and validation agree on secret/iss/aud.
+    Built standalone (NOT the conftest app). The auth_settings and
+    token_service share one settings instance, so signing and validation agree
+    on secret/iss/aud.
     """
     settings = AuthSettings(
         jwt_secret="probe-secret-" * 4,
         jwt_issuer="openwellness-api",
         jwt_audience="openwellness-api",
-        enforce_principal=enforce_principal,
     )
     token_service = JwtTokenService(settings=settings, clock=default_clock)
 
@@ -546,8 +545,8 @@ def _build_probe_app(*, enforce_principal: bool) -> tuple[FastAPI, JwtTokenServi
     return app, token_service
 
 
-def test_require_principal_http_enforce_on() -> None:
-    app, token_service = _build_probe_app(enforce_principal=True)
+def test_require_principal_http_strict() -> None:
+    app, token_service = _build_probe_app()
     client = TestClient(app)
 
     # (a) No Authorization → 401 UNAUTHENTICATED.
@@ -566,12 +565,23 @@ def test_require_principal_http_enforce_on() -> None:
     assert body["id"] == "U-probe"
 
 
-def test_require_principal_http_enforce_off_permissive() -> None:
-    app, _token_service = _build_probe_app(enforce_principal=False)
+def test_require_principal_http_has_no_permissive_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The retired permissive mode cannot be revived from the environment.
+
+    This test used to assert that ``enforce_principal=False`` let an
+    anonymous request through with 200. The flag is gone (09-06, T-09-34):
+    even with the old env var set to ``false``, an anonymous or header-named
+    caller gets 401.
+    """
+    monkeypatch.setenv("API_AUTH_ENFORCE_PRINCIPAL", "false")
+    app, _token_service = _build_probe_app()
     client = TestClient(app)
 
     resp = client.get("/_probe")
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["authenticated"] is False
-    assert body["id"] == "anonymous"
+    assert resp.status_code == 401, resp.text
+    assert resp.json()["error"]["status"] == "UNAUTHENTICATED"
+
+    named = client.get("/_probe", headers={"X-Principal-Id": "coach-alice"})
+    assert named.status_code == 401, named.text

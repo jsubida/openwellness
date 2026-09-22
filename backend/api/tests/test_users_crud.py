@@ -1,14 +1,15 @@
 """Happy-path CRUD for the top-level Users resource (AIP wire format)."""
 
 
-def test_user_crud_flow(client) -> None:
+def test_user_crud_flow(client, auth_headers) -> None:
+    headers = auth_headers()
     # Create
     payload = {
         "email": "a@b.com",
         "isActive": True,
         "username": "alice",
     }
-    r = client.post("/v1/users", json=payload)
+    r = client.post("/v1/users", json=payload, headers=headers)
     assert r.status_code == 201, r.text
     created = r.json()
     name = created["name"]
@@ -24,7 +25,9 @@ def test_user_crud_flow(client) -> None:
     assert r.json()["name"] == name
 
     # Patch — only changed field
-    r = client.patch(f"/v1/users/{user_id}", json={"location": "NY"})
+    r = client.patch(
+        f"/v1/users/{user_id}", json={"location": "NY"}, headers=headers
+    )
     assert r.status_code == 200
     assert r.json()["location"] == "NY"
     assert r.json()["username"] == "alice"  # unchanged
@@ -37,19 +40,19 @@ def test_user_crud_flow(client) -> None:
     assert body["nextPageToken"] is None
 
     # Archive (soft delete)
-    r = client.delete(f"/v1/users/{user_id}")
+    r = client.delete(f"/v1/users/{user_id}", headers=headers)
     assert r.status_code == 204
     # Still retrievable; archive copies, doesn't move.
     r = client.get(f"/v1/users/{user_id}")
     assert r.status_code == 200
 
     # Undelete (no-op for in-memory fake; round-trips the entity)
-    r = client.post(f"/v1/users/{user_id}:undelete")
+    r = client.post(f"/v1/users/{user_id}:undelete", headers=headers)
     assert r.status_code == 200
     assert r.json()["name"] == name
 
     # Purge (hard delete)
-    r = client.post(f"/v1/users/{user_id}:purge")
+    r = client.post(f"/v1/users/{user_id}:purge", headers=headers)
     assert r.status_code == 204
     r = client.get(f"/v1/users/{user_id}")
     assert r.status_code == 404

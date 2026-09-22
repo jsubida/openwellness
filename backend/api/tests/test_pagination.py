@@ -32,13 +32,16 @@ def test_paginate_emits_token_only_when_more_remain() -> None:
     assert t3 is None  # end of list
 
 
-def test_listing_uses_page_params(client) -> None:
+def test_listing_uses_page_params(client, auth_headers) -> None:
     # Create 5 users.
+    headers = auth_headers()
     for i in range(5):
-        client.post(
+        r = client.post(
             "/v1/users",
             json={"email": f"u{i}@x.com", "isActive": True, "username": f"u{i}"},
+            headers=headers,
         )
+        assert r.status_code == 201, r.text
     r = client.get("/v1/users", params={"page_size": 2})
     body = r.json()
     assert len(body["users"]) == 2

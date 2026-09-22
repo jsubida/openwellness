@@ -6,13 +6,13 @@ and ``.app.state.auth_container``. Valid-bearer cases mint a REAL access JWT
 via a real :class:`JwtTokenService` (PyJWT is never mocked).
 
 Top priority is the never-raise contract of ``get_principal`` (a malformed
-bearer must degrade to anonymous, NOT 401) and the enforce-gated 401 that may
-only originate in ``require_principal``.
+bearer must degrade to anonymous, NOT 401) and the unconditional 401 that
+``require_principal`` raises for any unauthenticated caller (the permissive
+``enforce_principal`` flag was retired in 09-06).
 """
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any, cast
 
@@ -85,7 +85,6 @@ class _FakeAuthContainer:
     def __init__(
         self,
         token_service: JwtTokenService | None = None,
-        enforce_principal: bool = False,
     ) -> None:
         self._token_service = token_service or JwtTokenService(
             settings=_settings(), clock=lambda: datetime.now(timezone.utc)
@@ -96,7 +95,6 @@ class _FakeAuthContainer:
             jwt_secret="x" * 40,
             jwt_issuer="openwellness-api",
             jwt_audience="openwellness-api",
-            enforce_principal=enforce_principal,
         )
 
     def token_service(self) -> JwtTokenService:
@@ -248,28 +246,17 @@ def test_get_principal_expired_token_falls_back_no_raise() -> None:
 # --------------------------------------------------------------------------- #
 # require_principal
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("enforce", [True, False])
-def test_require_principal_returns_authenticated_unchanged(enforce: bool) -> None:
-    container = _FakeAuthContainer(enforce_principal=enforce)
-    req = _FakeRequest({}, auth_container=container)
+def test_require_principal_returns_authenticated_unchanged() -> None:
     authed = Principal(
         id="U1", roles=("participant",), participant="P1", is_authenticated=True
     )
 
-    result = require_principal(req, principal=authed)  # type: ignore[arg-type]
+    result = require_principal(principal=authed)
 
     assert result is authed
 
 
-def test_require_principal_anonymous_enforce_on_raises_401() -> None:
-    container = _FakeAuthContainer(enforce_principal=True)
-    req = _FakeRequest({}, auth_container=container, path="/v1/secret")
-    anon = Principal(id="anonymous", is_authenticated=False)
-
-    with pytest.raises(HTTPException) as excinfo:
-        require_principal(req, principal=anon)  # type: ignore[arg-type]
-
-    exc = excinfo.value
+def _assert_unauthenticated_401(exc: HTTPException) -> None:
     assert exc.status_code == 401
     assert isinstance(exc.detail, dict)
     detail = cast("dict[str, Any]", exc.detail)
@@ -277,30 +264,28 @@ def test_require_principal_anonymous_enforce_on_raises_401() -> None:
     assert detail["error"]["code"] == 401
 
 
-def test_require_principal_anonymous_enforce_off_returns_and_warns(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    container = _FakeAuthContainer(enforce_principal=False)
-    req = _FakeRequest({}, auth_container=container, path="/v1/secret")
+def test_require_principal_anonymous_raises_401() -> None:
     anon = Principal(id="anonymous", is_authenticated=False)
 
-    with caplog.at_level(logging.WARNING, logger="openwellness_api.deps.principal"):
-        result = require_principal(req, principal=anon)  # type: ignore[arg-type]
+    with pytest.raises(HTTPException) as excinfo:
+        require_principal(principal=anon)
 
-    assert result is anon
-    assert any(
-        record.levelno == logging.WARNING
-        and "would-be 401" in record.getMessage()
-        and "/v1/secret" in record.getMessage()
-        for record in caplog.records
-    )
+    _assert_unauthenticated_401(excinfo.value)
 
 
-def test_require_principal_missing_auth_container_treats_enforce_false() -> None:
-    # No auth_container on app.state → must not crash, must treat enforce=False.
-    req = _FakeRequest({}, auth_container=_NO_CONTAINER)
-    anon = Principal(id="anonymous", is_authenticated=False)
+def test_require_principal_header_named_principal_raises_401() -> None:
+    # Formerly the enforce-off case returned this principal with a warning.
+    # With the flag retired there is no permissive mode: a principal named by
+    # an ``X-Principal-Id`` header is still unauthenticated, so it is refused.
+    named = Principal(id="coach-alice", is_authenticated=False)
 
-    result = require_principal(req, principal=anon)  # type: ignore[arg-type]
+    with pytest.raises(HTTPException) as excinfo:
+        require_principal(principal=named)
 
-    assert result is anon
+    _assert_unauthenticated_401(excinfo.value)
+
+
+def test_auth_settings_has_no_permissive_flag() -> None:
+    # T-09-34: no settings field (and so no API_AUTH_* env var) can weaken
+    # require_principal. Re-adding one must be a reviewed change to this test.
+    assert "enforce_principal" not in AuthSettings.model_fields

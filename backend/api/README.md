@@ -97,8 +97,10 @@ src/openwellness_api/
   access token yields an authenticated principal (roles + participant);
   otherwise it degrades to the legacy `X-Principal-Id` header or `anonymous`
   without ever raising. `principal.require_principal` is the strict variant
-  for sensitive routes — it 401s only when `API_AUTH_ENFORCE_PRINCIPAL` is
-  enabled.
+  for sensitive routes — it always 401s an unauthenticated caller; no setting
+  relaxes it. Writes on the `/v1` router are guarded centrally by
+  `principal.require_write_principal` (verified bearer required; any
+  `X-Principal-Id` header on a write is refused with 403).
 
 - **`errors/` — error mapping.** `handlers.register_exception_handlers` maps
   core's domain and adapter exceptions (e.g.
@@ -161,7 +163,7 @@ the `API_*` variables are API-only knobs.
 | `API_CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated browser origins allowed by CORS (dashboard SPA). |
 
 Auth adds three more setting groups — `API_AUTH_*` (JWT secret/TTLs, OTP
-length/TTL, rate limits, `API_AUTH_ENFORCE_PRINCIPAL`), `REDIS_*` (OTP and
+length/TTL, rate limits), `REDIS_*` (OTP and
 rate-limit store), and `SMTP_*` (login-code email delivery). See
 [`config.py`](src/openwellness_api/config.py) for the full list and defaults.
 

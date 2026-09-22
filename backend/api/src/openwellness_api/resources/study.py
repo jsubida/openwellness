@@ -17,7 +17,7 @@ from ..common.handlers import (
 )
 from ..common.pagination import PageParams, page_params, paginate
 from ..deps.container import container_dep
-from ..deps.principal import Principal, get_principal
+from ..deps.principal import READ_ONLY, Principal, get_principal
 from ..schemas.study import (
     Study,
     StudyCreate,
@@ -95,7 +95,10 @@ def build_router() -> APIRouter:
         rows = serialize_many(window, Study, collection=_COLLECTION)
         return {"studies": rows, "nextPageToken": next_token}
 
-    @router.post(":lookup", response_model=Study)
+    @router.post(
+        ":lookup", response_model=Study,
+        openapi_extra={READ_ONLY: True},
+    )
     def lookup(
         body: StudyLookup, repo: StudyRepository = Depends(repo_dep)
     ) -> Any:

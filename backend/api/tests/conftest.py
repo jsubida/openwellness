@@ -427,3 +427,22 @@ def seed_accounts(fakes: dict[type, Any]) -> dict[str, Any]:
 @pytest.fixture
 def client(app: FastAPI) -> TestClient:
     return TestClient(app)
+
+
+@pytest.fixture
+def auth_headers(app: FastAPI):
+    """Return ``auth_headers(subject)`` -> an ``Authorization: Bearer`` mapping.
+
+    The token is minted by the same ``JwtTokenService`` the app verifies with,
+    so every write route's ``require_write_principal`` guard accepts it. Mint,
+    never fabricate: a hand-built token would only prove the test agrees with
+    itself.
+    """
+
+    def _headers(subject: str = "test-principal") -> dict[str, str]:
+        token = app.state.auth_container.token_service().mint_access(
+            user_id=subject
+        )
+        return {"Authorization": f"Bearer {token}"}
+
+    return _headers
