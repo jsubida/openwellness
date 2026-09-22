@@ -17,7 +17,7 @@ from ..common.handlers import (
 )
 from ..common.pagination import PageParams, page_params, paginate
 from ..deps.container import container_dep
-from ..deps.principal import Principal, get_principal
+from ..deps.principal import READ_ONLY, Principal, get_principal
 from ..schemas.conversation import (
     Conversation,
     ConversationCreate,
@@ -105,7 +105,10 @@ def build_router() -> APIRouter:
         rows = serialize_many(window, Conversation, collection=_COLLECTION)
         return {"conversations": rows, "nextPageToken": next_token}
 
-    @router.post(":search", response_model=ConversationList)
+    @router.post(
+        ":search", response_model=ConversationList,
+        openapi_extra={READ_ONLY: True},
+    )
     def search(
         body: ConversationSearchBody,
         params: PageParams = Depends(page_params),

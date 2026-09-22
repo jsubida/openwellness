@@ -45,3 +45,15 @@ def test_read_is_not_guarded(client):
 def test_auth_routes_are_reachable_without_principal(client, path):
     response = client.post(path, json={})
     assert response.status_code not in {401, 403}
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/v1/conversations:search", {"filters": []}),
+        ("/v1/studies:lookup", {"name": "no-such-study"}),
+    ],
+)
+def test_read_only_post_methods_are_not_guarded(client, path, body):
+    response = client.post(path, json=body)
+    assert response.status_code not in {401, 403}, response.text

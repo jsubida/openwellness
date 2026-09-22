@@ -6,6 +6,7 @@ from fastapi.routing import APIRoute
 
 from openwellness_api.deps.principal import (
     ALLOW_UNAUTHENTICATED,
+    READ_ONLY,
     WRITE_METHODS,
     require_write_principal,
 )
@@ -19,6 +20,12 @@ EXPECTED_EXEMPTIONS = {
     "/v1/auth:verifyRegistrationCode",
     "/v1/auth:refreshToken",
     "/v1/auth:revokeToken",
+}
+
+# POST custom methods that only read (see READ_ONLY in deps/principal.py).
+EXPECTED_READ_ONLY = {
+    "/v1/conversations:search",
+    "/v1/studies:lookup",
 }
 
 
@@ -35,11 +42,15 @@ def _write_routes() -> list[APIRoute]:
 def test_every_write_route_is_guarded_or_explicitly_exempt() -> None:
     unguarded: list[str] = []
     exempt: set[str] = set()
+    read_only: set[str] = set()
 
     for route in _write_routes():
         extra = route.openapi_extra or {}
         if extra.get(ALLOW_UNAUTHENTICATED):
             exempt.add(route.path)
+            continue
+        if extra.get(READ_ONLY):
+            read_only.add(route.path)
             continue
         if not any(
             dependency.call is require_write_principal
@@ -49,6 +60,7 @@ def test_every_write_route_is_guarded_or_explicitly_exempt() -> None:
 
     assert unguarded == [], unguarded
     assert exempt == EXPECTED_EXEMPTIONS
+    assert read_only == EXPECTED_READ_ONLY
 
 
 def test_the_route_inventory_has_not_silently_shrunk() -> None:

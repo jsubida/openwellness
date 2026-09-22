@@ -37,6 +37,12 @@ logger = logging.getLogger(__name__)
 
 WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 ALLOW_UNAUTHENTICATED = "x-allow-unauthenticated"
+# POST is not synonymous with a mutation: a handful of AIP custom methods
+# (``:search``, ``:lookup``) take a request body but only read. They carry this
+# marker so the guard treats them as reads, which keep their pre-R-10
+# behaviour. It is not an authentication exemption for writes; the walking
+# test pins the exact set, so marking any other route needs a reviewed diff.
+READ_ONLY = "x-read-only"
 
 
 @dataclass(frozen=True)
@@ -120,10 +126,10 @@ def require_principal(
     )
 
 
-def _is_exempt(request: Request) -> bool:
+def _route_marker(request: Request, marker: str) -> bool:
     route = request.scope.get("route")
     extra = getattr(route, "openapi_extra", None)
-    return bool(extra and extra.get(ALLOW_UNAUTHENTICATED))
+    return bool(extra and extra.get(marker))
 
 
 def require_write_principal(
@@ -131,7 +137,11 @@ def require_write_principal(
     principal: Annotated[Principal, Depends(get_principal)],
 ) -> Principal:
     """Require a verified bearer principal on every non-exempt write."""
-    if request.method not in WRITE_METHODS or _is_exempt(request):
+    if (
+        request.method not in WRITE_METHODS
+        or _route_marker(request, READ_ONLY)
+        or _route_marker(request, ALLOW_UNAUTHENTICATED)
+    ):
         return principal
 
     if "x-principal-id" in request.headers:
