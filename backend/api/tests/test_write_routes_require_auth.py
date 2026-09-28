@@ -32,6 +32,8 @@ EXPECTED_EXEMPTIONS = {
     "/api/eventHandlers/fitbitHeartRecord",
     "/api/eventHandlers/post",
     "/api/eventHandlers/weight",
+    # The ActiGraph webhook and handshake (HOOK-02, D-17: frame's trust model).
+    "/api/eventHandlers/actigraph",
     "/api/eventHandlers{rest:path}",
 }
 

@@ -1,7 +1,7 @@
 """Native event-handler routes: Sync Gateway and vendor webhooks.
 
 These are permanent, externally registered contracts. Sync Gateway's
-``document_changed`` webhooks (and later ActiGraph) call these exact paths
+``document_changed`` webhooks and the ActiGraph webhook call these exact paths
 through the edge route table, so they live in their own package and never
 under ``compat/``.
 
@@ -23,6 +23,7 @@ from typing import Any, Final
 from fastapi import APIRouter, Response
 
 from ..deps.principal import ALLOW_UNAUTHENTICATED
+from .actigraph import build_actigraph_router
 from .celery_producer import CeleryTaskPublisher, ProducerSettings
 from .couchbase_views import CouchbaseViewConditionReader, CouchbaseViewSettingsReader
 from .hapi import boom
@@ -53,6 +54,7 @@ async def _hapi_not_found(rest: str) -> Response:
 def build_event_handlers_router() -> APIRouter:
     router = APIRouter()
     router.include_router(build_sync_gateway_router())
+    router.include_router(build_actigraph_router())
     # Must stay last: every real event route has to be matched before it.
     router.api_route(
         CATCH_ALL_PATH,
