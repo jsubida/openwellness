@@ -1135,6 +1135,104 @@
    "joi_ok": false,
    "joi_error": "object.base",
    "joi_value": null
+  },
+  {
+   "id": "ptype_str_overflow",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "1e309"
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_neg_overflow",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "-1e309"
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_nan",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "NaN"
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_infinity",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "Infinity"
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_neg_infinity",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "-Infinity"
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "height_str_overflow_ws",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "heightInInches": " 1e309 "
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "age_str_overflow",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "age": "1e309"
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
   }
  ],
  "body_cases": [

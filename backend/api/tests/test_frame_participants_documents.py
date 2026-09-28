@@ -107,6 +107,28 @@ def test_raw_body_numbers_reach_joi_as_frame_parses_them(case):
         assert str(exc.value).endswith(case["joi_error"])
 
 
+NON_FINITE_STRING_CASES = [
+    "ptype_str_overflow",
+    "ptype_str_neg_overflow",
+    "ptype_str_nan",
+    "ptype_str_infinity",
+    "ptype_str_neg_infinity",
+    "height_str_overflow_ws",
+    "age_str_overflow",
+]
+
+
+@pytest.mark.parametrize("case_id", NON_FINITE_STRING_CASES)
+def test_non_finite_numeric_strings_fail_with_joi_rule(case_id):
+    # "1e309" parses to Infinity; Joi calls it unsafe. "NaN"/"Infinity" fail
+    # Joi's number pattern (number.base). Captured from frame's Joi 17.13.4.
+    case = next(c for c in MATRIX if c["id"] == case_id)
+    assert case["joi_ok"] is False
+    with pytest.raises(ParticipantValidationError) as exc:
+        validate_create_payload(case["payload"])
+    assert str(exc.value).endswith(case["joi_error"])
+
+
 def test_the_known_divergence_is_exactly_the_tld_allow_list():
     case = next(c for c in MATRIX if c["id"] == "email_bogus_tld")
     assert case["joi_ok"] is False

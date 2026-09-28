@@ -112,6 +112,10 @@ def _to_number(key: str, value: Any) -> int | float:
         if not _NUMBER_RX.match(value):
             raise _fail(key, "number.base")
         number = float(value.strip())
+        if not math.isfinite(number):
+            # "1e309": parseFloat gives Infinity, and Joi's round-trip
+            # check ("Infinity" is not the input's digits) says unsafe.
+            raise _fail(key, "number.unsafe")
         if number.is_integer():
             if abs(number) > _MAX_SAFE:
                 raise _fail(key, "number.unsafe")

@@ -61,7 +61,7 @@ The fixtures under `backend/api/tests/fixtures/` are the source of truth. Each c
 |---|---|---|
 | `frame_payload_matrix.json` | 44 request payloads | POST to frame's `fitbitHeartRecord` from inside the network |
 | `frame_actigraph_matrix.json` | 36 HTTP responses, 108 V8 `Date` outputs | POST to frame's ActiGraph route; `node -e` in frame's container, `TZ=America/Chicago` |
-| `frame_participant_joi_matrix.json` | 69 payload verdicts | frame's Joi 17.13.4 run on frame's own schema in frame's container |
+| `frame_participant_joi_matrix.json` | 76 payload verdicts, 4 raw-body verdicts | frame's Joi 17.13.4 run on frame's own schema in frame's container |
 
 Rules the captures established:
 
@@ -100,7 +100,7 @@ Option 7B, a new scheduler task that does the reads, was rejected: it adds a sch
 `POST /api/participants` provisions the Sync Gateway user **first**, with an idempotent `PUT /{db}/_user/{name}` on the admin interface, then writes Mongo in frame's order: `participants` insert, `users` insert, `$set userId`, `$set roles.participant`. If any Mongo step fails it deletes the inserted documents newest first, then the SG user. Frame creates both concurrently and its compensation deletes the wrong name; neither behaviour is reproduced.
 
 - Authentication is the router-level `require_write_principal`; the handler then checks frame's `admin` scope and `root` group.
-- Validation replays frame's Joi on 68 of 69 captured cases. The one allowed divergence is Joi's IANA TLD list: `ow_api` accepts `a@example.invalidtld`, which Joi rejects.
+- Validation replays frame's Joi on 75 of 76 captured payloads and all 4 raw bodies. A numeric string that overflows to Infinity (`"1e309"`) is `number.unsafe`, as in Joi. The one allowed divergence is Joi's IANA TLD list: `ow_api` accepts `a@example.invalidtld`, which Joi rejects.
 - Values Joi accepts but frame fails on after writing (an uncastable `assignedCoachId`, a whitespace-only `participantNumber`) are refused before any write.
 - `hash_password` produces `$2b$10$` hashes, truncated to 72 UTF-8 bytes as node bcrypt does. Frame's node `bcrypt.compare` verifies them.
 - An unset `SYNC_GATEWAY_ADMIN_URL` or `SYNC_GATEWAY_DB` fails this route only (500), never boot.
