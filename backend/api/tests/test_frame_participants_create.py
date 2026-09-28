@@ -256,6 +256,29 @@ def test_supplied_free_id_becomes_the_participant_id(client, root, participant_f
     assert resp.json()["couchId"] == wanted
 
 
+def test_blocking_create_work_runs_off_the_event_loop(client, root, participant_fakes, monkeypatch):
+    # PyMongo, bcrypt and the SG admin call block; on the loop thread a slow
+    # SG answer would stall every other request for up to its timeout.
+    import asyncio
+
+    headers, study = root
+    seen: list[bool] = []
+    provision = participant_fakes.sync_users.provision
+
+    def recording_provision(*args: Any) -> bool:
+        try:
+            asyncio.get_running_loop()
+            seen.append(True)
+        except RuntimeError:
+            seen.append(False)
+        return provision(*args)
+
+    monkeypatch.setattr(participant_fakes.sync_users, "provision", recording_provision)
+    resp = client.post(PATH, json=_body(study), headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert seen == [False]
+
+
 # --- failures and compensation ------------------------------------------------
 
 

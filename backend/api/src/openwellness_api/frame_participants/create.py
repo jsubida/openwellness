@@ -40,6 +40,7 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import Depends, Request
 from pymongo.errors import DuplicateKeyError
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 
 from openwellness_core.application.repositories.sync_user_repository import (
@@ -161,6 +162,9 @@ async def create_participant(
     request: Request,
     principal: Annotated[Principal, Depends(get_principal)],
 ) -> Response:
+    """Read the body on the event loop, then run the blocking create (PyMongo,
+    bcrypt, the Sync Gateway admin call) in the threadpool, as the event
+    handlers do, so a slow SG call never stalls other requests."""
     step = "deps"
     try:
         deps: FrameParticipantDeps = request.app.state.frame_participant_deps
@@ -169,14 +173,22 @@ async def create_participant(
         parsed = await read_hapi_payload(request)
         if parsed.response is not None:
             return parsed.response
+    except Exception as exc:
+        _fail(step, exc)
+        return internal()
+    return await run_in_threadpool(_create, deps, parsed.payload, principal)
 
-        step = "scope"
+
+def _create(deps: FrameParticipantDeps, payload: Any, principal: Principal) -> Response:
+    """Everything after the payload read, in hapi's order. Blocking."""
+    step = "scope"
+    try:
         if "admin" not in principal.roles:
             return boom(403, "Insufficient scope")
 
         step = "validate"
         try:
-            body = validate_create_payload(parsed.payload)
+            body = validate_create_payload(payload)
         except ParticipantValidationError:
             return boom(400, "Invalid request payload input")
 
