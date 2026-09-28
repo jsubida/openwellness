@@ -75,7 +75,11 @@ def payload(**overrides):
 @pytest.mark.parametrize("case", MATRIX, ids=[c["id"] for c in MATRIX])
 def test_matches_frames_joi_verdict_and_converted_value(case):
     if case["id"] in KNOWN_DIVERGENCES:
-        pytest.skip("recorded approximation: Joi's IANA TLD allow-list")
+        # Recorded approximation (Joi's IANA TLD allow-list): Joi refuses,
+        # ow accepts. Asserted so that the divergence cannot silently widen.
+        assert case["joi_ok"] is False
+        validate_create_payload(case["payload"])
+        return
     if case["joi_ok"]:
         assert validate_create_payload(case["payload"]) == case["joi_value"]
     else:
