@@ -29,12 +29,14 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+import anyio
 import mongomock
 import pytest
 from bson import ObjectId
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from starlette.types import Message
 
 from openwellness_api.deps.principal import ALLOW_UNAUTHENTICATED
 from openwellness_api.event_handlers import build_event_handlers_router
@@ -205,14 +207,70 @@ def h(monkeypatch: pytest.MonkeyPatch) -> Harness:
     return Harness()
 
 
-def _headers(resp: Any) -> dict[str, str]:
-    """Raw response headers as the fixture stores them (latin-1, lines joined)."""
+def _join(raw: list[tuple[bytes, bytes]]) -> dict[str, str]:
+    """Raw headers as the fixture stores them (latin-1, repeated lines joined)."""
     out: dict[str, str] = {}
-    for name, value in resp.headers.raw:
+    for name, value in raw:
         key = name.decode("latin-1").lower()
         text = value.decode("latin-1")
         out[key] = out[key] + "\n" + text if key in out else text
     return out
+
+
+def _headers(resp: Any) -> dict[str, str]:
+    return _join(list(resp.headers.raw))
+
+
+def _asgi_post(
+    app: FastAPI, body: bytes, content_type: str | None
+) -> tuple[int, dict[str, str], bytes]:
+    """POST straight through the ASGI interface and keep the raw header bytes.
+
+    Starlette's TestClient decodes response header values as UTF-8 and httpx
+    re-encodes them as ASCII, so it cannot carry a byte such as the ``C3 A9``
+    frame sends for an echoed ``é``. The server (uvicorn) writes the bytes the
+    app hands it, so the app's own ``http.response.start`` headers are what a
+    caller receives.
+    """
+    headers = [(b"host", b"testserver"), (b"content-length", str(len(body)).encode())]
+    if content_type is not None:
+        headers.append((b"content-type", content_type.encode("latin-1")))
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": PATH,
+        "raw_path": PATH.encode(),
+        "query_string": b"",
+        "root_path": "",
+        "headers": headers,
+        "client": ("testclient", 50000),
+        "server": ("testserver", 80),
+    }
+    messages: list[Message] = []
+    delivered = False
+
+    async def receive() -> Message:
+        nonlocal delivered
+        if not delivered:
+            delivered = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        messages.append(message)
+
+    async def run() -> None:
+        await app(scope, receive, send)
+
+    anyio.run(run)
+    start = next(m for m in messages if m["type"] == "http.response.start")
+    content = b"".join(
+        m.get("body", b"") for m in messages if m["type"] == "http.response.body"
+    )
+    return start["status"], _join(list(start["headers"])), content
 
 
 def _assert_closed(resp: Any) -> None:
@@ -245,11 +303,11 @@ def _assert_internal(resp: Any) -> None:
 @pytest.mark.parametrize("entry", MATRIX["responses"], ids=lambda e: e["id"])
 def test_captured_frame_response_replays(h: Harness, entry: dict[str, Any]) -> None:
     body = base64.b64decode(entry["body_b64"])
-    resp = h.post(body, entry["content_type"])
+    status, headers, content = _asgi_post(h.app, body, entry["content_type"])
 
-    assert resp.status_code == entry["frame_status"]
-    assert resp.content.decode("utf-8") == entry["frame_body"]
-    assert _headers(resp) == entry["frame_headers"]
+    assert status == entry["frame_status"]
+    assert content.decode("utf-8") == entry["frame_body"]
+    assert headers == entry["frame_headers"]
     assert h.publisher.calls == []
 
 
@@ -464,7 +522,11 @@ def test_non_string_observer_publishes_nothing_logs_once_and_answers_204(
     assert resp.status_code == 204
     assert resp.headers["content-type"] == HTML_UTF8
     assert h.publisher.calls == []
-    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    errors = [
+        r
+        for r in caplog.records
+        if r.levelno >= logging.ERROR and r.name.startswith("openwellness_api")
+    ]
     assert len(errors) == 1
     assert "actigraph" in errors[0].getMessage()
 
@@ -474,7 +536,9 @@ def test_publish_failure_is_500(h: Harness, caplog: pytest.LogCaptureFixture) ->
     h.publisher.raise_with = TaskPublishError("broker down")
     with caplog.at_level(logging.INFO):
         _assert_internal(h.post(COMPLETED))
-    messages = [r.getMessage() for r in caplog.records]
+    messages = [
+        r.getMessage() for r in caplog.records if r.name.startswith("openwellness_api")
+    ]
     assert messages == ["eventHandlers/actigraph failed: TaskPublishError"]
 
 
@@ -547,7 +611,11 @@ def test_validation_codes_never_appear_in_logs(
         for code in codes:
             h.post({"ValidationCode": code})
     assert "sentinel" not in caplog.text
-    failures = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+    failures = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno >= logging.ERROR and r.name.startswith("openwellness_api")
+    ]
     assert failures == ["eventHandlers/actigraph failed: InvalidHeaderValue"] * 2
 
 
