@@ -9,6 +9,18 @@
   ``value`` is the document with ``id`` set from the row id
   (``base.js topLevelProperties``).
 - ``MongoStudyReader`` is ``Study.findById`` on collection ``studies``.
+
+The SMART weight path (D-04, placement 7A) adds two more:
+
+- ``CouchbaseViewConditionReader`` is ``Condition.fetchLatest(owner)``
+  (``api/server/models/couchbase/condition.js``): the view
+  ``condition/byOwnerAndWeekAndCreatedAt``, key range
+  ``[owner, -999, 0]``..``[owner, 999, 999999999999]`` inclusive,
+  ``reduce(false)`` and no ``stale``, so no scan consistency is sent
+  (``couchbase-admin.js`` maps only an explicit ``stale``). ``fetch`` maps the
+  rows to their values and ``fetchLatest`` takes the LAST one.
+- ``MongoParticipantReader`` is ``Participant.findByCouchId`` on collection
+  ``participants``: ``findOne({couchId})``.
 """
 
 from __future__ import annotations
@@ -26,13 +38,22 @@ from couchbase.options import ViewOptions
 from couchbase.views import ViewScanConsistency
 
 from openwellness_api.event_handlers.couchbase_views import (
+    CONDITION_DESIGN_DOC,
+    CONDITION_VIEW_NAME,
     DESIGN_DOC,
     VIEW_NAME,
+    CouchbaseViewConditionReader,
     CouchbaseViewSettingsReader,
 )
-from openwellness_api.event_handlers.mongo_readers import MongoStudyReader
+from openwellness_api.event_handlers.mongo_readers import (
+    MongoParticipantReader,
+    MongoStudyReader,
+)
 from openwellness_api.event_handlers.ports import (
     ComponentSettingsReader,
+    ConditionReader,
+    EventHandlerDeps,
+    ParticipantReader,
     StudyReader,
 )
 
@@ -234,6 +255,156 @@ def test_malformed_id_raises_invalid_id(db: Any) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# CouchbaseViewConditionReader (SMART weight, D-04)
+# --------------------------------------------------------------------------- #
+
+
+def _condition_row(doc_id: str, week: int, created_at: int, **fields: Any) -> Row:
+    value = {"owner": "o1", "week": week, "createdAt": created_at, **fields}
+    return Row(id=doc_id, key=["o1", week, created_at], value=value)
+
+
+def test_condition_reader_satisfies_the_port() -> None:
+    reader: ConditionReader = CouchbaseViewConditionReader(FakeBucket())
+    assert reader is not None
+
+
+def test_condition_reader_queries_frames_view_by_name() -> None:
+    bucket = FakeBucket()
+
+    CouchbaseViewConditionReader(bucket).latest("o1")
+
+    assert len(bucket.calls) == 1
+    design_doc, view_name, _, _ = bucket.calls[0]
+    assert (design_doc, view_name) == ("condition", "byOwnerAndWeekAndCreatedAt")
+    assert (CONDITION_DESIGN_DOC, CONDITION_VIEW_NAME) == (design_doc, view_name)
+
+
+def test_condition_key_range_is_frames_with_reduce_false_and_no_consistency() -> None:
+    bucket = FakeBucket()
+
+    CouchbaseViewConditionReader(bucket).latest("o1")
+
+    _, _, options, kwargs = bucket.calls[0]
+    assert kwargs == {}
+    assert len(options) == 1
+    opts = options[0]
+    assert isinstance(opts, ViewOptions)
+    expected = ViewOptions(
+        startkey=["o1", -999, 0],
+        endkey=["o1", 999, 999999999999],
+        inclusive_end=True,
+        reduce=False,
+    )
+    assert dict(opts) == dict(expected)
+    assert "scan_consistency" not in dict(opts)
+
+
+def test_installed_sdk_sends_no_scan_consistency_for_conditions() -> None:
+    """Frame's ``Condition.fetch`` sets no ``stale``: the server default applies."""
+    bucket = FakeBucket()
+    CouchbaseViewConditionReader(bucket).latest("o1")
+    _, _, options, _ = bucket.calls[0]
+
+    query = ViewQuery.create_view_query_object(
+        "spring", CONDITION_DESIGN_DOC, CONDITION_VIEW_NAME, *options
+    )
+
+    assert query.startkey == json.dumps(["o1", -999, 0])
+    assert query.endkey == json.dumps(["o1", 999, 999999999999])
+    assert query.inclusive_end is True
+    assert query.reduce is False
+    assert "scan_consistency" not in query.as_encodable()
+
+
+def test_condition_reader_returns_the_last_row_value() -> None:
+    first = _condition_row("c-1", 1, 1000, responderState=0)
+    middle = _condition_row("c-2", 2, 2000, responderState=1)
+    last = _condition_row("c-3", 3, 3000, responderState=2)
+    bucket = FakeBucket([first, middle, last])
+
+    condition = CouchbaseViewConditionReader(bucket).latest("o1")
+
+    # fetch maps rows to ``value`` only; fetchLatest takes rows.slice(-1)[0].
+    assert condition == last.value
+    assert condition is not None
+    assert condition["responderState"] == 2
+    assert "id" not in condition
+
+
+def test_condition_reader_zero_rows_is_none() -> None:
+    assert CouchbaseViewConditionReader(FakeBucket([])).latest("o1") is None
+
+
+def test_condition_owner_passes_through_unchanged() -> None:
+    bucket = FakeBucket()
+
+    CouchbaseViewConditionReader(bucket).latest(None)
+
+    opts = bucket.calls[0][2][0]
+    assert opts["startkey"] == [None, -999, 0]
+    assert opts["endkey"] == [None, 999, 999999999999]
+
+
+# --------------------------------------------------------------------------- #
+# MongoParticipantReader (SMART weight, D-04)
+# --------------------------------------------------------------------------- #
+
+
+def test_participant_reader_satisfies_the_port(db: Any) -> None:
+    reader: ParticipantReader = MongoParticipantReader(db)
+    assert reader is not None
+
+
+def test_find_by_couch_id_returns_the_participants_document(db: Any) -> None:
+    pid = ObjectId()
+    db["participants"].insert_one(
+        {"_id": pid, "couchId": "c1", "isActive": True, "participantType": 0}
+    )
+    db["participants"].insert_one({"_id": ObjectId(), "couchId": "c2"})
+
+    participant = MongoParticipantReader(db).find_by_couch_id("c1")
+
+    assert participant is not None
+    assert participant["_id"] == pid
+    assert participant["isActive"] is True
+    assert participant["participantType"] == 0
+
+
+def test_find_by_couch_id_queries_couch_id_only(db: Any) -> None:
+    db["participants"].insert_one({"_id": ObjectId(), "userId": "c1"})
+    db["participants"].insert_one({"_id": "c1", "couchId": "other"})
+
+    assert MongoParticipantReader(db).find_by_couch_id("c1") is None
+
+
+def test_find_by_couch_id_unknown_is_none(db: Any) -> None:
+    assert MongoParticipantReader(db).find_by_couch_id("nobody") is None
+
+
+# --------------------------------------------------------------------------- #
+# Un-wired defaults: loud, never a silent skip
+# --------------------------------------------------------------------------- #
+
+
+def test_unwired_condition_and_participant_readers_raise() -> None:
+    deps = EventHandlerDeps(
+        settings=CouchbaseViewSettingsReader(FakeBucket()),
+        studies=MongoStudyReader(mongomock.MongoClient().db),
+        publisher=_NoPublisher(),
+    )
+    with pytest.raises(RuntimeError, match="not wired"):
+        deps.conditions.latest("o1")
+    with pytest.raises(RuntimeError, match="not wired"):
+        deps.participants.find_by_couch_id("c1")
+
+
+class _NoPublisher:
+    def publish(self, task_name: str, args: list[Any]) -> None:
+        raise AssertionError("no publish expected")
+
+
+# --------------------------------------------------------------------------- #
 # Production wiring (the lifespan's build_event_handler_deps)
 # --------------------------------------------------------------------------- #
 
@@ -258,6 +429,15 @@ def test_build_event_handler_deps_wires_the_real_readers_and_publisher(
     assert isinstance(deps.studies, MongoStudyReader)
     assert isinstance(deps.publisher, CeleryTaskPublisher)
     assert deps.settings.first("s1", 2) == {**_setting_row("doc-1", 1).value, "id": "doc-1"}
+    # The SMART weight readers share the same bucket and Mongo handle.
+    assert isinstance(deps.conditions, CouchbaseViewConditionReader)
+    assert isinstance(deps.participants, MongoParticipantReader)
+    assert deps.conditions.latest("s1") == _setting_row("doc-1", 1).value
+    assert bucket.calls[-1][:2] == ("condition", "byOwnerAndWeekAndCreatedAt")
+    db["participants"].insert_one({"_id": ObjectId(), "couchId": "c9"})
+    found = deps.participants.find_by_couch_id("c9")
+    assert found is not None
+    assert found["couchId"] == "c9"
 
 
 def test_unset_broker_url_logs_one_warning_naming_only_the_key(

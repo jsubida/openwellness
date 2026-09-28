@@ -63,3 +63,17 @@ class CouchbaseViewSettingsReader:
         # base.js topLevelProperties: the row value is the document, with
         # ``id`` set from the row id.
         return {**row.value, "id": row.id}
+
+
+CONDITION_DESIGN_DOC: Final = "condition"
+CONDITION_VIEW_NAME: Final = "byOwnerAndWeekAndCreatedAt"
+
+
+class CouchbaseViewConditionReader:
+    """Stub (10-05 Task 2 RED)."""
+
+    def __init__(self, bucket: Any) -> None:
+        self._bucket = bucket
+
+    def latest(self, owner: object) -> dict[str, Any] | None:
+        return None

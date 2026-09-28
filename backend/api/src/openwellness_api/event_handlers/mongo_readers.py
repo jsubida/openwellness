@@ -30,3 +30,13 @@ class MongoStudyReader:
         # Any other type raises TypeError, also a 500.
         oid = ObjectId(cast("str | ObjectId", study_id))
         return self._db[STUDIES].find_one({"_id": oid}, {"name": 1})
+
+
+class MongoParticipantReader:
+    """Stub (10-05 Task 2 RED)."""
+
+    def __init__(self, db: Any) -> None:
+        self._db = db
+
+    def find_by_couch_id(self, couch_id: object) -> dict[str, Any] | None:
+        return None

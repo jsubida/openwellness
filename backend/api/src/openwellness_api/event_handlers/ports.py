@@ -37,6 +37,22 @@ class StudyReader(Protocol):
         ...
 
 
+class ConditionReader(Protocol):
+    """Frame's ``Condition.fetchLatest(owner)`` (SMART weight, D-04)."""
+
+    def latest(self, owner: object) -> dict[str, Any] | None:
+        """Return the owner's latest Condition document, or ``None``."""
+        ...
+
+
+class ParticipantReader(Protocol):
+    """Frame's ``Participant.findByCouchId`` (SMART weight, D-04)."""
+
+    def find_by_couch_id(self, couch_id: object) -> dict[str, Any] | None:
+        """Return the ``participants`` document for ``couchId``, or ``None``."""
+        ...
+
+
 class TaskPublisher(Protocol):
     """Hands one task, by name, to the broker frame's workers consume."""
 
