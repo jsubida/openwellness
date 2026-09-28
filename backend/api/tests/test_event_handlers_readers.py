@@ -21,6 +21,15 @@ The SMART weight path (D-04, placement 7A) adds two more:
   rows to their values and ``fetchLatest`` takes the LAST one.
 - ``MongoParticipantReader`` is ``Participant.findByCouchId`` on collection
   ``participants``: ``findOne({couchId})``.
+
+The ActiGraph pre chain (HOOK-02) adds two Mongo reads
+(``api/server/api/event-handlers.js:343-370``):
+
+- ``MongoDeviceReader`` is ``Device.find({serialNumber})[0]`` on collection
+  ``devices`` (Mongoose model ``device``): the first match in natural order.
+- ``MongoParticipantReader.find_by_id`` is
+  ``Participant.findById(new ObjectID(pid))``: ``new ObjectID(null)`` is a
+  fresh id that matches nothing, and a malformed id throws (hapi 500).
 """
 
 from __future__ import annotations
@@ -46,12 +55,14 @@ from openwellness_api.event_handlers.couchbase_views import (
     CouchbaseViewSettingsReader,
 )
 from openwellness_api.event_handlers.mongo_readers import (
+    MongoDeviceReader,
     MongoParticipantReader,
     MongoStudyReader,
 )
 from openwellness_api.event_handlers.ports import (
     ComponentSettingsReader,
     ConditionReader,
+    DeviceReader,
     EventHandlerDeps,
     ParticipantReader,
     StudyReader,
@@ -383,6 +394,94 @@ def test_find_by_couch_id_unknown_is_none(db: Any) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# MongoParticipantReader.find_by_id (ActiGraph, HOOK-02)
+# --------------------------------------------------------------------------- #
+
+
+def test_find_participant_by_id_returns_the_participants_document(db: Any) -> None:
+    pid, study = ObjectId(), ObjectId()
+    db["participants"].insert_one({"_id": pid, "couchId": "c1", "studyId": study})
+    db["participants"].insert_one({"_id": ObjectId(), "couchId": "c2"})
+
+    for key in (str(pid), pid):
+        participant = MongoParticipantReader(db).find_by_id(key)
+        assert participant is not None
+        assert participant["couchId"] == "c1"
+        assert participant["studyId"] == study
+
+
+def test_find_participant_by_id_unknown_is_none(db: Any) -> None:
+    db["participants"].insert_one({"_id": ObjectId(), "couchId": "c1"})
+    assert MongoParticipantReader(db).find_by_id(str(ObjectId())) is None
+
+
+def test_find_participant_by_id_none_is_none_without_a_query() -> None:
+    class Exploding:
+        def __getitem__(self, name: str) -> Any:
+            raise AssertionError("no query for a None id")
+
+    # `new ObjectID(null)` is a fresh id, so frame's findById finds nothing.
+    assert MongoParticipantReader(Exploding()).find_by_id(None) is None
+
+
+def test_find_participant_by_id_malformed_raises(db: Any) -> None:
+    with pytest.raises(InvalidId):
+        MongoParticipantReader(db).find_by_id("not-an-object-id")
+
+
+def test_find_participant_by_id_never_matches_on_couch_id(db: Any) -> None:
+    pid = ObjectId()
+    db["participants"].insert_one({"_id": ObjectId(), "couchId": str(pid)})
+    assert MongoParticipantReader(db).find_by_id(str(pid)) is None
+
+
+# --------------------------------------------------------------------------- #
+# MongoDeviceReader (ActiGraph, HOOK-02)
+# --------------------------------------------------------------------------- #
+
+
+def test_device_reader_satisfies_the_port(db: Any) -> None:
+    reader: DeviceReader = MongoDeviceReader(db)
+    assert reader is not None
+
+
+def test_first_by_serial_number_returns_the_first_match_in_natural_order(
+    db: Any,
+) -> None:
+    first, second = ObjectId(), ObjectId()
+    db["devices"].insert_one({"_id": ObjectId(), "serialNumber": "11111"})
+    db["devices"].insert_one({"_id": first, "serialNumber": "28953", "participantId": ObjectId()})
+    db["devices"].insert_one({"_id": second, "serialNumber": "28953", "participantId": ObjectId()})
+
+    device = MongoDeviceReader(db).first_by_serial_number("28953")
+
+    assert device is not None
+    assert device["_id"] == first
+
+
+def test_first_by_serial_number_unknown_is_none(db: Any) -> None:
+    db["devices"].insert_one({"_id": ObjectId(), "serialNumber": "11111"})
+    assert MongoDeviceReader(db).first_by_serial_number("28953") is None
+
+
+def test_first_by_serial_number_queries_serial_number_only(db: Any) -> None:
+    db["devices"].insert_one({"_id": ObjectId(), "subjectId": "28953", "serialNumber": "x"})
+    db["participants"].insert_one({"_id": ObjectId(), "serialNumber": "28953"})
+    assert MongoDeviceReader(db).first_by_serial_number("28953") is None
+
+
+@pytest.mark.parametrize("serial", [None, {"$gt": ""}, ["28953"], 28953])
+def test_first_by_serial_number_refuses_anything_but_a_string(
+    db: Any, serial: Any
+) -> None:
+    # A non-string filter value could be a query operator or match every
+    # device (T-10-32). The route only ever passes a string.
+    db["devices"].insert_one({"_id": ObjectId(), "serialNumber": "28953"})
+    with pytest.raises(TypeError):
+        MongoDeviceReader(db).first_by_serial_number(serial)
+
+
+# --------------------------------------------------------------------------- #
 # Un-wired defaults: loud, never a silent skip
 # --------------------------------------------------------------------------- #
 
@@ -397,6 +496,10 @@ def test_unwired_condition_and_participant_readers_raise() -> None:
         deps.conditions.latest("o1")
     with pytest.raises(RuntimeError, match="not wired"):
         deps.participants.find_by_couch_id("c1")
+    with pytest.raises(RuntimeError, match="not wired"):
+        deps.participants.find_by_id(str(ObjectId()))
+    with pytest.raises(RuntimeError, match="not wired"):
+        deps.devices.first_by_serial_number("28953")
 
 
 class _NoPublisher:
@@ -438,6 +541,15 @@ def test_build_event_handler_deps_wires_the_real_readers_and_publisher(
     found = deps.participants.find_by_couch_id("c9")
     assert found is not None
     assert found["couchId"] == "c9"
+    # The ActiGraph readers share the same Mongo handle.
+    assert isinstance(deps.devices, MongoDeviceReader)
+    db["devices"].insert_one({"_id": ObjectId(), "serialNumber": "28953"})
+    device = deps.devices.first_by_serial_number("28953")
+    assert device is not None
+    assert device["serialNumber"] == "28953"
+    by_id = deps.participants.find_by_id(found["_id"])
+    assert by_id is not None
+    assert by_id["couchId"] == "c9"
 
 
 def test_unset_broker_url_logs_one_warning_naming_only_the_key(

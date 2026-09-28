@@ -46,10 +46,25 @@ class ConditionReader(Protocol):
 
 
 class ParticipantReader(Protocol):
-    """Frame's ``Participant.findByCouchId`` (SMART weight, D-04)."""
+    """Frame's ``Participant`` lookups on the ``participants`` collection."""
 
     def find_by_couch_id(self, couch_id: object) -> dict[str, Any] | None:
-        """Return the ``participants`` document for ``couchId``, or ``None``."""
+        """``Participant.findByCouchId`` (SMART weight, D-04), or ``None``."""
+        ...
+
+    def find_by_id(self, participant_id: object) -> dict[str, Any] | None:
+        """``Participant.findById(new ObjectID(pid))`` (ActiGraph, HOOK-02).
+
+        ``None`` for an unknown or absent id; raises on a malformed id.
+        """
+        ...
+
+
+class DeviceReader(Protocol):
+    """Frame's ``Device.find({serialNumber})[0]`` (ActiGraph, HOOK-02)."""
+
+    def first_by_serial_number(self, serial_number: str) -> dict[str, Any] | None:
+        """Return the first ``devices`` document with that serial, or ``None``."""
         ...
 
 
@@ -81,6 +96,16 @@ class _NotWiredParticipants:
     def find_by_couch_id(self, couch_id: object) -> dict[str, Any] | None:
         raise RuntimeError("ParticipantReader not wired")
 
+    def find_by_id(self, participant_id: object) -> dict[str, Any] | None:
+        raise RuntimeError("ParticipantReader not wired")
+
+
+class _NotWiredDevices:
+    """Default until the lifespan wires a real reader: loud, never a skip."""
+
+    def first_by_serial_number(self, serial_number: str) -> dict[str, Any] | None:
+        raise RuntimeError("DeviceReader not wired")
+
 
 @dataclass(frozen=True)
 class EventHandlerDeps:
@@ -102,6 +127,8 @@ class EventHandlerDeps:
     # production path missing them is a hapi 500, never a silent 204.
     conditions: ConditionReader = field(default_factory=_NotWiredConditions)
     participants: ParticipantReader = field(default_factory=_NotWiredParticipants)
+    # The ActiGraph device lookup (HOOK-02); loud when un-wired, as above.
+    devices: DeviceReader = field(default_factory=_NotWiredDevices)
 
 
 def get_event_handler_deps(request: Request) -> EventHandlerDeps:

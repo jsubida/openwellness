@@ -49,3 +49,16 @@ class MongoParticipantReader:
 
     def find_by_couch_id(self, couch_id: object) -> dict[str, Any] | None:
         return self._db[PARTICIPANTS].find_one({"couchId": couch_id})
+
+    def find_by_id(self, participant_id: object) -> dict[str, Any] | None:
+        return None
+
+
+class MongoDeviceReader:
+    """Stub (RED)."""
+
+    def __init__(self, db: Any) -> None:
+        self._db = db
+
+    def first_by_serial_number(self, serial_number: str) -> dict[str, Any] | None:
+        return None
