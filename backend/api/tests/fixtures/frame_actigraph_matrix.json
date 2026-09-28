@@ -1,0 +1,1022 @@
+{
+ "captured_from": {
+  "frame": "api submodule 6706a1e5 (13.5.7-12-g6706a1e5), hapi 21.4.10, node v22.23.1",
+  "http": "curl POST http://api:3000/api/eventHandlers/actigraph from inside the dev edge container",
+  "dates": "JSON.stringify(new Date(input)) via node -e in the dev api container",
+  "dropped_headers": [
+   "connection",
+   "date",
+   "keep-alive",
+   "server"
+  ]
+ },
+ "tz": "America/Chicago",
+ "responses": [
+  {
+   "id": "vc_ascii",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICJhYmMxMjMifQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "abc123",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_latin1",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICLDqSJ9",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "Ã©",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_non_latin1",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICLinJMifQ==",
+   "frame_status": 500,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "96",
+    "content-type": "application/json; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "{\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"An internal server error occurred\"}"
+  },
+  {
+   "id": "vc_crlf",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICJhXHJcbmIifQ==",
+   "frame_status": 500,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "96",
+    "content-type": "application/json; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "{\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"An internal server error occurred\"}"
+  },
+  {
+   "id": "vc_bel",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICJhXHUwMDA3YiJ9",
+   "frame_status": 500,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "96",
+    "content-type": "application/json; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "{\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"An internal server error occurred\"}"
+  },
+  {
+   "id": "vc_tab",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICJhXHRiIn0=",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "a\tb",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_del",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICJhf2IifQ==",
+   "frame_status": 500,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "96",
+    "content-type": "application/json; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "{\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"An internal server error occurred\"}"
+  },
+  {
+   "id": "vc_number",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IDEyM30=",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "123",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_float",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IDEuNX0=",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "1.5",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_true",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IHRydWV9",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "true",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_object",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IHt9fQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "[object Object]",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_object_keys",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IHsiYSI6IDF9fQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "[object Object]",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_array",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IFsiYSIsICJiIl19",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "a\nb",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_empty_array",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IFtdfQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_zero",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IDB9",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "vc_empty_string",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICIifQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "vc_false",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IGZhbHNlfQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "vc_null",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IG51bGx9",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "vc_leading_space",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICIgYWJjICJ9",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": " abc ",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_latin1_ff",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICLDvyJ9",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "Ã¿",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_array_mixed",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IFtudWxsLCAxLCBbIngiLCBudWxsXSwge31dfQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "null\n1\nx,\n[object Object]",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_array_empty_string",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IFsiIl19",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_array_nested_empty",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IFtbXV19",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_array_crlf",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IFsiYVxyXG5iIl19",
+   "frame_status": 500,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "96",
+    "content-type": "application/json; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "{\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"An internal server error occurred\"}"
+  },
+  {
+   "id": "vc_array_non_latin1",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IFsib2siLCAi4pyTIl19",
+   "frame_status": 500,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "96",
+    "content-type": "application/json; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "{\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"An internal server error occurred\"}"
+  },
+  {
+   "id": "vc_object_length_zero",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IHsibGVuZ3RoIjogMH19",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "[object Object]",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_big_number",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IDFlKzIxfQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "1e+21",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "vc_negative_zero_float",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6IC0wLjB9",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "vc_nan_like_string",
+   "content_type": "application/json",
+   "body_b64": "eyJWYWxpZGF0aW9uQ29kZSI6ICJOYU4ifQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "NaN",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  },
+  {
+   "id": "notif_started",
+   "content_type": "application/json",
+   "body_b64": "eyJzdGF0dXMiOiAic3RhcnRlZCIsICJ1cGxvYWRJZCI6ICI2ODM1MzAiLCAic3R1ZHlJZCI6ICI1NzkiLCAic3ViamVjdElkIjogIjI4OTUzIn0=",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "notif_completed_no_device",
+   "content_type": "application/json",
+   "body_b64": "eyJzdGF0dXMiOiAiY29tcGxldGVkIiwgInN1YmplY3RJZCI6ICJfX3Bhcml0eV9ub25lXzcwZmRhM2NmIiwgImZpcnN0RXBvY2hVVEMiOiAiMjAyMC0wMi0yMlQyMzowMTowMC4wMDAwMDAwIiwgImxhc3RFcG9jaFVUQyI6ICIyMDIwLTAyLTIzVDIyOjU3OjAwLjAwMDAwMDAifQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "empty_body_json",
+   "content_type": "application/json",
+   "body_b64": "",
+   "frame_status": 500,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "96",
+    "content-type": "application/json; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "{\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"An internal server error occurred\"}"
+  },
+  {
+   "id": "array_body",
+   "content_type": "application/json",
+   "body_b64": "W10=",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "status_not_string",
+   "content_type": "application/json",
+   "body_b64": "eyJzdGF0dXMiOiAxfQ==",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "string_body",
+   "content_type": "text/plain",
+   "body_b64": "aGVsbG8=",
+   "frame_status": 200,
+   "frame_headers": {
+    "content-length": "0"
+   },
+   "frame_body": ""
+  },
+  {
+   "id": "form_validation_code",
+   "content_type": "application/x-www-form-urlencoded",
+   "body_b64": "VmFsaWRhdGlvbkNvZGU9Zm9ybWNvZGU=",
+   "frame_status": 200,
+   "frame_headers": {
+    "access-control-expose-headers": "WWW-Authenticate,Server-Authorization",
+    "cache-control": "no-cache",
+    "content-length": "24",
+    "content-type": "text/html; charset=utf-8",
+    "strict-transport-security": "max-age=15768000",
+    "vary": "origin",
+    "x-actigraph-hook-secret": "formcode",
+    "x-content-type-options": "nosniff",
+    "x-download-options": "noopen",
+    "x-frame-options": "DENY",
+    "x-xss-protection": "0"
+   },
+   "frame_body": "Validation Code Received"
+  }
+ ],
+ "dates": [
+  {
+   "id": "actigraph_7digit",
+   "v8": "2020-02-23T05:01:00.000Z",
+   "input": "2020-02-22T23:01:00.0000000"
+  },
+  {
+   "id": "actigraph_7digit_fraction",
+   "v8": "2020-02-23T05:01:00.123Z",
+   "input": "2020-02-22T23:01:00.1239999"
+  },
+  {
+   "id": "utc_z",
+   "v8": "2020-02-22T23:01:00.000Z",
+   "input": "2020-02-22T23:01:00Z"
+  },
+  {
+   "id": "offset_plus2",
+   "v8": "2020-02-22T21:01:00.000Z",
+   "input": "2020-02-22T23:01:00+02:00"
+  },
+  {
+   "id": "date_only",
+   "v8": "2020-02-22T00:00:00.000Z",
+   "input": "2020-02-22"
+  },
+  {
+   "id": "dst_ambiguous",
+   "v8": "2020-11-01T06:30:00.000Z",
+   "input": "2020-11-01T01:30:00.0000000"
+  },
+  {
+   "id": "dst_gap",
+   "v8": "2020-03-08T08:30:00.000Z",
+   "input": "2020-03-08T02:30:00.0000000"
+  },
+  {
+   "id": "space_separated",
+   "v8": "2020-02-23T05:01:00.000Z",
+   "input": "2020-02-22 23:01:00"
+  },
+  {
+   "id": "slash_form",
+   "v8": "2020-02-23T05:01:00.000Z",
+   "input": "2020/02/22 23:01"
+  },
+  {
+   "id": "not_a_date",
+   "v8": null,
+   "input": "not a date"
+  },
+  {
+   "id": "empty_string",
+   "v8": null,
+   "input": ""
+  },
+  {
+   "id": "epoch_ms",
+   "v8": "2020-02-22T23:01:00.000Z",
+   "input": 1582412460000
+  },
+  {
+   "id": "fractional_number",
+   "v8": "1970-01-01T00:00:00.001Z",
+   "input": 1.9
+  },
+  {
+   "id": "negative_fraction",
+   "v8": "1969-12-31T23:59:59.999Z",
+   "input": -1.9
+  },
+  {
+   "id": "json_null",
+   "v8": "1970-01-01T00:00:00.000Z",
+   "input": null
+  },
+  {
+   "id": "bool_true",
+   "v8": "1970-01-01T00:00:00.001Z",
+   "input": true
+  },
+  {
+   "id": "bool_false",
+   "v8": "1970-01-01T00:00:00.000Z",
+   "input": false
+  },
+  {
+   "id": "no_seconds",
+   "v8": "2020-02-23T05:01:00.000Z",
+   "input": "2020-02-22T23:01"
+  },
+  {
+   "id": "one_digit_fraction",
+   "v8": "2020-02-23T05:01:00.500Z",
+   "input": "2020-02-22T23:01:00.5"
+  },
+  {
+   "id": "fraction_z",
+   "v8": "2020-02-22T23:01:00.123Z",
+   "input": "2020-02-22T23:01:00.1239999Z"
+  },
+  {
+   "id": "offset_minus0530_frac",
+   "v8": "2020-02-23T04:31:00.123Z",
+   "input": "2020-02-22T23:01:00.123-05:30"
+  },
+  {
+   "id": "lowercase_t_z",
+   "v8": "2020-02-22T23:01:00.000Z",
+   "input": "2020-02-22t23:01:00z"
+  },
+  {
+   "id": "year_month",
+   "v8": "2020-02-01T00:00:00.000Z",
+   "input": "2020-02"
+  },
+  {
+   "id": "year_only",
+   "v8": "2020-01-01T00:00:00.000Z",
+   "input": "2020"
+  },
+  {
+   "id": "hour_24",
+   "v8": "2020-02-23T06:00:00.000Z",
+   "input": "2020-02-22T24:00:00"
+  },
+  {
+   "id": "month_13",
+   "v8": null,
+   "input": "2020-13-01T00:00:00"
+  },
+  {
+   "id": "feb_30",
+   "v8": "2020-03-01T06:00:00.000Z",
+   "input": "2020-02-30T00:00:00"
+  },
+  {
+   "id": "leading_space",
+   "v8": null,
+   "input": " 2020-02-22T23:01:00"
+  },
+  {
+   "id": "trailing_space",
+   "v8": null,
+   "input": "2020-02-22T23:01:00 "
+  },
+  {
+   "id": "offset_no_colon",
+   "v8": "2020-02-22T21:01:00.000Z",
+   "input": "2020-02-22T23:01:00+0200"
+  },
+  {
+   "id": "time_zone_utc_word",
+   "v8": null,
+   "input": "2020-02-22T23:01:00 UTC"
+  },
+  {
+   "id": "max_ms",
+   "v8": "+275760-09-13T00:00:00.000Z",
+   "input": 8640000000000000.0
+  },
+  {
+   "id": "over_max_ms",
+   "v8": null,
+   "input": 8640000000000001.0
+  },
+  {
+   "id": "numeric_string",
+   "v8": null,
+   "input": "1582412460000"
+  },
+  {
+   "id": "array_value",
+   "v8": "2020-01-01T00:00:00.000Z",
+   "input": [
+    2020
+   ]
+  },
+  {
+   "id": "object_value",
+   "v8": null,
+   "input": {}
+  },
+  {
+   "id": "probe_00",
+   "v8": null,
+   "input": "2020-02-32T00:00:00"
+  },
+  {
+   "id": "probe_01",
+   "v8": "2020-03-01T00:00:00.000Z",
+   "input": "2020-02-30"
+  },
+  {
+   "id": "probe_02",
+   "v8": "2020-05-01T05:00:00.000Z",
+   "input": "2020-04-31T00:00:00"
+  },
+  {
+   "id": "probe_03",
+   "v8": null,
+   "input": "2020-02-22T24:00:01"
+  },
+  {
+   "id": "probe_04",
+   "v8": null,
+   "input": "2020-02-22T25:00:00"
+  },
+  {
+   "id": "probe_05",
+   "v8": null,
+   "input": "2020-02-22T23:60:00"
+  },
+  {
+   "id": "probe_06",
+   "v8": null,
+   "input": "2020-02-22T23:01:60"
+  },
+  {
+   "id": "probe_07",
+   "v8": null,
+   "input": "2020/02/22T23:01"
+  },
+  {
+   "id": "probe_08",
+   "v8": null,
+   "input": "2020-2-22T23:01:00"
+  },
+  {
+   "id": "probe_09",
+   "v8": "2020-02-22T23:01:00.123Z",
+   "input": "2020-02-22T23:01:00.123456789Z"
+  },
+  {
+   "id": "probe_10",
+   "v8": null,
+   "input": "2020-02-22T23:01:00+02"
+  },
+  {
+   "id": "probe_11",
+   "v8": null,
+   "input": "2020-02-22T23:01:00+2:00"
+  },
+  {
+   "id": "probe_12",
+   "v8": "2020-02-22T06:00:00.000Z",
+   "input": "2020/02/22"
+  },
+  {
+   "id": "probe_13",
+   "v8": null,
+   "input": "2020-02-22T23"
+  },
+  {
+   "id": "probe_14",
+   "v8": "2020-02-22T23:01:00.000Z",
+   "input": "+002020-02-22T23:01:00Z"
+  },
+  {
+   "id": "probe_15",
+   "v8": null,
+   "input": "2020-00-10T00:00:00"
+  },
+  {
+   "id": "probe_16",
+   "v8": null,
+   "input": "2020-02-00T00:00:00"
+  },
+  {
+   "id": "probe_17",
+   "v8": null,
+   "input": "2020-02-22T23:01:00.Z"
+  },
+  {
+   "id": "probe_18",
+   "v8": "2020-02-22T23:01:00.000Z",
+   "input": "2020-02-22T23:01:00-00:00"
+  },
+  {
+   "id": "probe_19",
+   "v8": null,
+   "input": "2020-02-22T23:01:00+24:00"
+  },
+  {
+   "id": "probe_20",
+   "v8": "2020-02-22T23:01:00.000Z",
+   "input": "2020-02-22 23:01:00Z"
+  },
+  {
+   "id": "probe_21",
+   "v8": "2020-02-22T23:01:00.000Z",
+   "input": "2020-02-22T23:01:00.0000000z"
+  },
+  {
+   "id": "probe_22",
+   "v8": "2020-02-22T23:01:00.000Z",
+   "input": "2020-02-22T23:01:00.0000000+00:00"
+  },
+  {
+   "id": "probe_23",
+   "v8": "2020-02-23T05:01:00.000Z",
+   "input": "2020/02/22 23:01:00"
+  },
+  {
+   "id": "probe_24",
+   "v8": "2020-02-23T05:01:00.500Z",
+   "input": "2020/02/22 23:01:00.5"
+  },
+  {
+   "id": "probe_25",
+   "v8": null,
+   "input": "2020-02-22T23:01:00."
+  },
+  {
+   "id": "probe_26",
+   "v8": "0001-01-01T05:50:36.000Z",
+   "input": "0001-01-01T00:00:00"
+  },
+  {
+   "id": "probe_27",
+   "v8": "1900-06-01T18:00:00.000Z",
+   "input": "1900-06-01T12:00:00"
+  },
+  {
+   "id": "probe_28",
+   "v8": "2020-02-21T23:02:00.000Z",
+   "input": "2020-02-22T23:01:00+23:59"
+  },
+  {
+   "id": "probe_29",
+   "v8": "2020-02-22T23:01:00.000Z",
+   "input": "2020-02-22T23:01Z"
+  },
+  {
+   "id": "probe_30",
+   "v8": "2020-02-23T05:01:00.123Z",
+   "input": "2020-02-22T23:01:00.1239999-06:00"
+  },
+  {
+   "id": "probe_31",
+   "v8": "2020-03-02T00:00:00.000Z",
+   "input": "2020-02-31"
+  },
+  {
+   "id": "probe_32",
+   "v8": "2020-02-23T05:01:00.000Z",
+   "input": "2020-02-22t23:01:00"
+  },
+  {
+   "id": "probe_33",
+   "v8": null,
+   "input": "2020-02-22T23:01:00ZZ"
+  },
+  {
+   "id": "probe_34",
+   "v8": null,
+   "input": "2020-02-22T23:01:00 Z"
+  },
+  {
+   "id": "probe_35",
+   "v8": "2020-02-23T05:01:00.000Z",
+   "input": "2020-02-22  23:01:00"
+  },
+  {
+   "id": "probe_36",
+   "v8": null,
+   "input": "20200222T230100"
+  },
+  {
+   "id": "probe_37",
+   "v8": "2020-07-04T17:00:00.000Z",
+   "input": "2020-07-04T12:00:00.0000000"
+  },
+  {
+   "id": "probe_38",
+   "v8": "2020-11-01T08:30:00.000Z",
+   "input": "2020-11-01T02:30:00.0000000"
+  },
+  {
+   "id": "probe_39",
+   "v8": "2020-03-08T08:00:00.000Z",
+   "input": "2020-03-08T03:00:00.0000000"
+  },
+  {
+   "id": "probe_40",
+   "v8": "2020-02-23T00:00:00.000Z",
+   "input": "2020-02-22T24:00:00Z"
+  },
+  {
+   "id": "undefined",
+   "v8": null,
+   "undefined": true
+  }
+ ]
+}
