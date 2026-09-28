@@ -23,6 +23,7 @@ import logging
 from typing import Any
 
 import pytest
+from bson import ObjectId
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
@@ -43,6 +44,8 @@ from openwellness_api.event_handlers.ports import (
 PATH = "/api/eventHandlers/fitbitHeartRecord"
 ACTIVITY_PATH = "/api/eventHandlers/activity"
 POST_PATH = "/api/eventHandlers/post"
+WEIGHT_PATH = "/api/eventHandlers/weight"
+SMART_TASK = "jobs.smartRerandomization.waitForWeight"
 
 # STUDY_SPECIFIC's three legacy ids (api/config.js:112-115), as test values.
 SMART_ID = "5f0000000000000000000a01"
@@ -120,6 +123,26 @@ class RecordingPublisher:
         self.calls.append((task_name, args))
 
 
+class FakeParticipants:
+    def __init__(self) -> None:
+        self.docs: dict[Any, dict[str, Any]] = {}
+        self.calls: list[object] = []
+
+    def find_by_couch_id(self, couch_id: object) -> dict[str, Any] | None:
+        self.calls.append(couch_id)
+        return self.docs.get(couch_id)
+
+
+class FakeConditions:
+    def __init__(self) -> None:
+        self.latest_by_owner: dict[Any, dict[str, Any]] = {}
+        self.calls: list[object] = []
+
+    def latest(self, owner: object) -> dict[str, Any] | None:
+        self.calls.append(owner)
+        return self.latest_by_owner.get(owner)
+
+
 class RaisingSettings:
     def first(self, study_id: object, component_type: int) -> dict[str, Any] | None:
         raise RuntimeError("view missing")
@@ -130,6 +153,8 @@ class Harness:
         self.settings = FakeSettings()
         self.studies = FakeStudies()
         self.publisher = RecordingPublisher()
+        self.participants = FakeParticipants()
+        self.conditions = FakeConditions()
         self.legacy = LegacyStudyIdsProvider.of(LEGACY_IDS)
         self.app = FastAPI()
         self.app.include_router(build_event_handlers_router())
@@ -146,6 +171,8 @@ class Harness:
             studies=self.studies,
             publisher=self.publisher,
             legacy_studies=self.legacy,
+            conditions=self.conditions,
+            participants=self.participants,
         )
 
     def post(self, body: bytes) -> Any:
@@ -465,6 +492,9 @@ def test_activity_legacy_study_answers_204_without_enqueueing(
     # The pre chain ran exactly as for any study: one settings read, no study.
     assert h.settings.calls == [(study_id, 2)]
     assert h.studies.calls == []
+    # D-03: none of processLegacyActivity's participant or Condition reads.
+    assert h.participants.calls == []
+    assert h.conditions.calls == []
 
 
 @pytest.mark.parametrize("study_id", [SMART_ID, FTT_ID, MPOWER_ID])
@@ -567,6 +597,263 @@ def test_activity_reads_study_specific_from_the_process_env(
 
 
 # --------------------------------------------------------------------------- #
+# POST /api/eventHandlers/weight (Weight, inline weightObserver, [owner, _id])
+# --------------------------------------------------------------------------- #
+
+
+def _weight_body(study_id: str = "s1", owner: str = "o", doc_id: str = "w") -> bytes:
+    return json.dumps({"studyId": study_id, "owner": owner, "_id": doc_id}).encode()
+
+
+def _assert_no_legacy_reads(h: Harness) -> None:
+    assert h.participants.calls == []
+    assert h.conditions.calls == []
+
+
+def test_weight_empty_object_is_400_missing_study_id(h: Harness) -> None:
+    _assert_boom(h.post_to(WEIGHT_PATH, b"{}"), 400, BAD_REQUEST_MISSING)
+    assert h.settings.calls == []
+
+
+def test_weight_non_legacy_publishes_owner_and_id_and_answers_204(
+    h: Harness,
+) -> None:
+    h.settings.rows[("s1", 1)] = _setting(1, "weightObserver", "jobs.w")
+    resp = h.post_to(WEIGHT_PATH, _weight_body())
+    assert resp.status_code == 204
+    assert resp.content == b""
+    assert "content-type" not in resp.headers
+    _assert_hapi_headers(resp)
+    assert h.publisher.calls == [("jobs.w", ["o", "w"])]
+    assert h.settings.calls == [("s1", 1)]
+    assert h.studies.calls == []
+    _assert_no_legacy_reads(h)
+
+
+def test_weight_missing_owner_and_id_publish_nulls(h: Harness) -> None:
+    h.settings.rows[("s1", 1)] = _setting(1, "weightObserver", "jobs.w")
+    assert h.post_to(WEIGHT_PATH, b'{"studyId":"s1"}').status_code == 204
+    assert h.publisher.calls == [("jobs.w", [None, None])]
+
+
+def test_weight_without_weight_setting_is_412_type_1(h: Harness) -> None:
+    resp = h.post_to(WEIGHT_PATH, _weight_body())
+    _assert_boom(
+        resp, 412, _precondition("Study (s1): no component settings of type 1")
+    )
+    assert h.settings.calls == [("s1", 1)]
+
+
+@pytest.mark.parametrize("value", [UNDEFINED, "", []], ids=["missing", "empty", "empty-array"])
+def test_weight_missing_observer_looks_up_the_payloads_study(
+    h: Harness, value: Any
+) -> None:
+    # The setting names another study: frame's inline pre ignores it and
+    # looks up ``request.payload.studyId``.
+    h.settings.rows[("s1", 1)] = _setting(1, "weightObserver", value, "setting-study")
+    h.studies.docs["s1"] = {"_id": "s1", "name": "Pilot"}
+    h.studies.docs["setting-study"] = {"_id": "setting-study", "name": "Wrong"}
+    resp = h.post_to(WEIGHT_PATH, _weight_body())
+    _assert_boom(resp, 412, _precondition("Study (Pilot) has no weightObserver value"))
+    assert h.studies.calls == ["s1"]
+    assert h.publisher.calls == []
+
+
+def test_weight_missing_observer_for_an_unknown_study_is_500(h: Harness) -> None:
+    h.settings.rows[("s1", 1)] = _setting(1, "weightObserver")
+    _assert_boom(h.post_to(WEIGHT_PATH, _weight_body()), 500, INTERNAL)
+    assert h.studies.calls == ["s1"]
+
+
+def test_weight_null_observer_is_500_before_any_study_lookup(h: Harness) -> None:
+    h.settings.rows[("s1", 1)] = _setting(1, "weightObserver", None)
+    h.studies.docs["s1"] = {"_id": "s1", "name": "Pilot"}
+    _assert_boom(h.post_to(WEIGHT_PATH, _weight_body()), 500, INTERNAL)
+    assert h.studies.calls == []
+    assert h.publisher.calls == []
+
+
+def _smart(
+    h: Harness,
+    *,
+    participant: dict[str, Any] | None = None,
+    condition: dict[str, Any] | None = None,
+    owner: str = "o",
+) -> None:
+    h.settings.rows[(SMART_ID, 1)] = _setting(1, "weightObserver", "jobs.w", SMART_ID)
+    if participant is not None:
+        h.participants.docs[owner] = participant
+    if condition is not None:
+        h.conditions.latest_by_owner[owner] = condition
+
+
+def test_smart_weight_pending_publishes_wait_for_weight(h: Harness) -> None:
+    pid = ObjectId()
+    _smart(
+        h,
+        participant={"_id": pid, "couchId": "o", "isActive": True, "participantType": 0},
+        condition={"responderState": 0},
+    )
+    resp = h.post_to(WEIGHT_PATH, _weight_body(SMART_ID))
+    assert resp.status_code == 204
+    assert resp.content == b""
+    assert "content-type" not in resp.headers
+    _assert_hapi_headers(resp)
+    assert h.publisher.calls == [(SMART_TASK, [str(pid), "w"])]
+    assert h.publisher.calls[0][1][0] == format(pid)
+    assert len(h.publisher.calls[0][1][0]) == 24
+    assert h.participants.calls == ["o"]
+    assert h.conditions.calls == ["o"]
+
+
+def test_smart_weight_default_fields_behave_as_mongoose_defaults(h: Harness) -> None:
+    """No ``isActive`` / ``participantType``: Mongoose's defaults (true, 0) apply."""
+    pid = ObjectId()
+    _smart(h, participant={"_id": pid, "couchId": "o"}, condition={"responderState": 0})
+    assert h.post_to(WEIGHT_PATH, _weight_body(SMART_ID)).status_code == 204
+    assert h.publisher.calls == [(SMART_TASK, [str(pid), "w"])]
+
+
+@pytest.mark.parametrize(
+    "state", [1, 2, 3, "0", False, None, UNDEFINED],
+    ids=["nonresponder", "responder", "mia", "string-0", "false", "null", "missing"],
+)
+def test_smart_weight_non_pending_publishes_nothing(h: Harness, state: Any) -> None:
+    condition: dict[str, Any] = {} if state is UNDEFINED else {"responderState": state}
+    _smart(
+        h,
+        participant={"_id": ObjectId(), "isActive": True, "participantType": 0},
+        condition=condition,
+    )
+    resp = h.post_to(WEIGHT_PATH, _weight_body(SMART_ID))
+    assert resp.status_code == 204
+    assert "content-type" not in resp.headers
+    assert h.publisher.calls == []
+    assert h.conditions.calls == ["o"]
+
+
+def test_smart_weight_pending_float_zero_publishes(h: Harness) -> None:
+    """``0.0 === 0`` in JS: a JSON ``0.0`` is still PENDING."""
+    pid = ObjectId()
+    _smart(h, participant={"_id": pid}, condition={"responderState": 0.0})
+    assert h.post_to(WEIGHT_PATH, _weight_body(SMART_ID)).status_code == 204
+    assert h.publisher.calls == [(SMART_TASK, [str(pid), "w"])]
+
+
+@pytest.mark.parametrize(
+    "participant",
+    [
+        {"isActive": False, "participantType": 0},
+        {"isActive": True, "participantType": 3},
+        {"isActive": False, "participantType": 3},
+    ],
+    ids=["inactive", "ftt-buddy", "inactive-buddy"],
+)
+def test_smart_weight_inactive_or_buddy_answers_204_before_the_condition_read(
+    h: Harness, participant: dict[str, Any]
+) -> None:
+    _smart(
+        h,
+        participant={"_id": ObjectId(), **participant},
+        condition={"responderState": 0},
+    )
+    resp = h.post_to(WEIGHT_PATH, _weight_body(SMART_ID))
+    assert resp.status_code == 204
+    assert h.publisher.calls == []
+    assert h.participants.calls == ["o"]
+    assert h.conditions.calls == []
+
+
+def test_smart_weight_without_condition_answers_204(h: Harness) -> None:
+    _smart(h, participant={"_id": ObjectId(), "isActive": True, "participantType": 0})
+    resp = h.post_to(WEIGHT_PATH, _weight_body(SMART_ID))
+    assert resp.status_code == 204
+    assert resp.content == b""
+    assert h.publisher.calls == []
+    assert h.conditions.calls == ["o"]
+
+
+def test_smart_weight_unknown_participant_is_500(
+    h: Harness, caplog: pytest.LogCaptureFixture
+) -> None:
+    """``Object.keys(null)`` throws in frame before its not-found log."""
+    _smart(h, condition={"responderState": 0})
+    body = _weight_body(SMART_ID, owner=OWNER_SENTINEL)
+    with caplog.at_level(logging.DEBUG):
+        resp = h.post_to(WEIGHT_PATH, body)
+    _assert_boom(resp, 500, INTERNAL)
+    assert h.publisher.calls == []
+    assert h.participants.calls == [OWNER_SENTINEL]
+    assert h.conditions.calls == []
+    assert "eventHandlers/weight failed: TypeError" in caplog.text
+    assert OWNER_SENTINEL not in caplog.text
+
+
+def test_smart_weight_publish_failure_is_500(h: Harness) -> None:
+    _smart(h, participant={"_id": ObjectId()}, condition={"responderState": 0})
+    h.publisher.raise_with = TaskPublishError("broker down")
+    _assert_boom(h.post_to(WEIGHT_PATH, _weight_body(SMART_ID)), 500, INTERNAL)
+
+
+def test_smart_weight_still_runs_the_pre_chain(h: Harness) -> None:
+    resp = h.post_to(WEIGHT_PATH, _weight_body(SMART_ID))
+    _assert_boom(
+        resp,
+        412,
+        _precondition(f"Study ({SMART_ID}): no component settings of type 1"),
+    )
+    _assert_no_legacy_reads(h)
+
+
+def test_smart_weight_never_publishes_the_settings_observer(h: Harness) -> None:
+    pid = ObjectId()
+    _smart(h, participant={"_id": pid}, condition={"responderState": 0})
+    h.post_to(WEIGHT_PATH, _weight_body(SMART_ID))
+    assert [name for name, _ in h.publisher.calls] == [SMART_TASK]
+
+
+@pytest.mark.parametrize("study_id", [FTT_ID, MPOWER_ID])
+def test_fit2thrive_and_mpower_weight_answer_204_with_no_reads(
+    h: Harness, study_id: str
+) -> None:
+    h.settings.rows[(study_id, 1)] = _setting(1, "weightObserver", "jobs.w", study_id)
+    h.participants.docs["o"] = {"_id": ObjectId(), "isActive": True}
+    h.conditions.latest_by_owner["o"] = {"responderState": 0}
+    resp = h.post_to(WEIGHT_PATH, _weight_body(study_id))
+    assert resp.status_code == 204
+    assert resp.content == b""
+    assert "content-type" not in resp.headers
+    assert h.publisher.calls == []
+    _assert_no_legacy_reads(h)
+
+
+def test_weight_with_unusable_study_specific_is_500(
+    h: Harness, caplog: pytest.LogCaptureFixture
+) -> None:
+    h.install(legacy=LegacyStudyIdsProvider.from_value("not json"))
+    h.settings.rows[("s1", 1)] = _setting(1, "weightObserver", "jobs.w")
+    with caplog.at_level(logging.DEBUG):
+        resp = h.post_to(WEIGHT_PATH, _weight_body())
+    _assert_boom(resp, 500, INTERNAL)
+    assert h.publisher.calls == []
+    assert "eventHandlers/weight failed: LegacyStudyConfigError" in caplog.text
+
+
+def test_smart_weight_unwired_readers_are_500_not_a_silent_skip(
+    h: Harness,
+) -> None:
+    h.app.state.event_handler_deps = EventHandlerDeps(
+        settings=h.settings,
+        studies=h.studies,
+        publisher=h.publisher,
+        legacy_studies=h.legacy,
+    )
+    h.settings.rows[(SMART_ID, 1)] = _setting(1, "weightObserver", "jobs.w", SMART_ID)
+    _assert_boom(h.post_to(WEIGHT_PATH, _weight_body(SMART_ID)), 500, INTERNAL)
+    assert h.publisher.calls == []
+
+
+# --------------------------------------------------------------------------- #
 # legacy_studies: STUDY_SPECIFIC parsing
 # --------------------------------------------------------------------------- #
 
@@ -644,7 +931,7 @@ def test_event_handler_deps_default_to_the_process_env_provider() -> None:
 # --------------------------------------------------------------------------- #
 
 
-SG_PATHS = [PATH, ACTIVITY_PATH, POST_PATH]
+SG_PATHS = [PATH, ACTIVITY_PATH, POST_PATH, WEIGHT_PATH]
 
 
 @pytest.mark.parametrize("path", SG_PATHS)

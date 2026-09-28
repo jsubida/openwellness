@@ -31,6 +31,7 @@ EXPECTED_EXEMPTIONS = {
     "/api/eventHandlers/activity",
     "/api/eventHandlers/fitbitHeartRecord",
     "/api/eventHandlers/post",
+    "/api/eventHandlers/weight",
     "/api/eventHandlers{rest:path}",
 }
 
