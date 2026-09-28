@@ -20,6 +20,18 @@ Why a view and not N1QL (10-RESEARCH answer 4):
   for the study and type, ties ordered by the view engine. OpenWellness's
   N1QL repositories take ``results[-1]``, the newest, which would enqueue a
   different task than frame for any study holding more than one setting.
+
+The SMART weight path (D-04, placement 7A) also reads the owner's latest
+Condition through frame's ``Condition.fetchLatest``
+(``api/server/models/couchbase/condition.js``), again a view:
+
+- design doc ``condition``, view ``byOwnerAndWeekAndCreatedAt``;
+- key range ``[owner, -999, 0]``..``[owner, 999, 999999999999]``, end
+  inclusive, ``reduce(false)``;
+- no ``stale``: ``couchbase-admin.js`` sends a scan consistency only for an
+  explicit ``stale``, so the server default applies and none is sent here;
+- ``fetch`` maps rows to their ``value`` and ``fetchLatest`` takes the LAST
+  row (``rows.slice(-1)[0]``), the newest by week then ``createdAt``.
 """
 
 from __future__ import annotations
@@ -68,12 +80,37 @@ class CouchbaseViewSettingsReader:
 CONDITION_DESIGN_DOC: Final = "condition"
 CONDITION_VIEW_NAME: Final = "byOwnerAndWeekAndCreatedAt"
 
+# Condition.fetch's default bounds (startWeek -999, endWeek 999) and its
+# createdAt bounds, verbatim.
+_WEEK_MIN: Final = -999
+_WEEK_MAX: Final = 999
+_CONDITION_CREATED_AT_MIN: Final = 0
+_CONDITION_CREATED_AT_MAX: Final = 999999999999
+
 
 class CouchbaseViewConditionReader:
-    """Stub (10-05 Task 2 RED)."""
+    """``Condition.fetchLatest(owner)``: the owner's newest Condition, or ``None``.
+
+    ``bucket`` is a Couchbase SDK ``Bucket`` (anything with ``view_query``).
+    Read-only (D-02).
+    """
 
     def __init__(self, bucket: Any) -> None:
         self._bucket = bucket
 
     def latest(self, owner: object) -> dict[str, Any] | None:
-        return None
+        options = ViewOptions(
+            startkey=[owner, _WEEK_MIN, _CONDITION_CREATED_AT_MIN],
+            endkey=[owner, _WEEK_MAX, _CONDITION_CREATED_AT_MAX],
+            inclusive_end=True,
+            reduce=False,
+        )
+        result = self._bucket.view_query(
+            CONDITION_DESIGN_DOC, CONDITION_VIEW_NAME, options
+        )
+        latest: dict[str, Any] | None = None
+        for row in result.rows():
+            latest = row.value
+        # ``if (latest)``: a document value is always an object, so only an
+        # empty result gives null.
+        return latest

@@ -68,6 +68,20 @@ class TaskPublishError(Exception):
     """
 
 
+class _NotWiredConditions:
+    """Default until the lifespan wires a real reader: loud, never a skip."""
+
+    def latest(self, owner: object) -> dict[str, Any] | None:
+        raise RuntimeError("ConditionReader not wired")
+
+
+class _NotWiredParticipants:
+    """Default until the lifespan wires a real reader: loud, never a skip."""
+
+    def find_by_couch_id(self, couch_id: object) -> dict[str, Any] | None:
+        raise RuntimeError("ParticipantReader not wired")
+
+
 @dataclass(frozen=True)
 class EventHandlerDeps:
     """Everything an event-handler route may touch.
@@ -84,6 +98,10 @@ class EventHandlerDeps:
     legacy_studies: LegacyStudyIdsProvider = field(
         default_factory=LegacyStudyIdsProvider.from_process_env
     )
+    # The SMART weight reads (D-04). An un-wired default raises, so a
+    # production path missing them is a hapi 500, never a silent 204.
+    conditions: ConditionReader = field(default_factory=_NotWiredConditions)
+    participants: ParticipantReader = field(default_factory=_NotWiredParticipants)
 
 
 def get_event_handler_deps(request: Request) -> EventHandlerDeps:

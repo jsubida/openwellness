@@ -118,10 +118,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         app.state.auth_container = auth_container
 
-        # Event-handler deps (HOOK-01): frame's own Couchbase view on the
+        # Event-handler deps (HOOK-01): frame's own Couchbase views on the
         # bucket the entity repository already opened (no second cluster
         # connection), frame's ``studies`` collection on the same Mongo
         # handle, and the Celery producer for the queue ``router`` consumes.
+        # The SMART weight readers (D-04) share both handles: ``conditions``
+        # (CouchbaseViewConditionReader) and ``participants``
+        # (MongoParticipantReader) are assigned into EventHandlerDeps by
+        # build_event_handler_deps. ``STUDY_SPECIFIC`` is read on first use.
         # The producer connects lazily, so an unset CELERY_BROKER_URL does
         # not stop boot; it logs one warning and every publish answers 500.
         entity_repository = container.repositories.entity_repository()
