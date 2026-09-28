@@ -26,7 +26,7 @@ from ..deps.principal import ALLOW_UNAUTHENTICATED
 from .celery_producer import CeleryTaskPublisher, ProducerSettings
 from .couchbase_views import CouchbaseViewConditionReader, CouchbaseViewSettingsReader
 from .hapi import boom
-from .mongo_readers import MongoParticipantReader, MongoStudyReader
+from .mongo_readers import MongoDeviceReader, MongoParticipantReader, MongoStudyReader
 from .ports import EventHandlerDeps
 from .sync_gateway import PREFIX, build_sync_gateway_router
 
@@ -70,8 +70,9 @@ def build_event_handler_deps(
     """Production deps: frame's views, frame's collections, Celery.
 
     Settings and the SMART Conditions come from frame's Couchbase views on
-    one bucket; studies and SMART participants from frame's Mongo
-    collections on one handle; ``STUDY_SPECIFIC`` is read on first use.
+    one bucket; studies, participants (SMART and ActiGraph) and ActiGraph
+    devices from frame's Mongo collections on one handle;
+    ``STUDY_SPECIFIC`` is read on first use.
 
     ``bucket`` is the Couchbase SDK bucket of the already-initialized entity
     repository; ``db`` is the Mongo collection repository. Logs one WARNING,
@@ -88,4 +89,5 @@ def build_event_handler_deps(
         publisher=CeleryTaskPublisher(producer_settings),
         conditions=CouchbaseViewConditionReader(bucket),
         participants=MongoParticipantReader(db),
+        devices=MongoDeviceReader(db),
     )

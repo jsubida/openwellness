@@ -125,7 +125,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # The SMART weight readers (D-04) share both handles: ``conditions``
         # (CouchbaseViewConditionReader) and ``participants``
         # (MongoParticipantReader) are assigned into EventHandlerDeps by
-        # build_event_handler_deps. ``STUDY_SPECIFIC`` is read on first use.
+        # build_event_handler_deps, as is the ActiGraph ``devices`` reader
+        # (MongoDeviceReader) on the same Mongo handle (HOOK-02).
+        # ``STUDY_SPECIFIC`` is read on first use.
         # The producer connects lazily, so an unset CELERY_BROKER_URL does
         # not stop boot; it logs one warning and every publish answers 500.
         entity_repository = container.repositories.entity_repository()
