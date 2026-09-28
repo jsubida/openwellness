@@ -80,9 +80,158 @@ class FrameParticipantDeps:
     clock: Callable[[], datetime] = field(default=_utc_now)
 
 
+def sync_user_channels(couch_id: str, study_id: str) -> list[str]:
+    """Frame's ``admin_channels`` for a participant's SG user (D-14)."""
+    return [couch_id, f"study:{study_id}", SHARED_CHANNEL]
+
+
+def _is_root_admin(db: Any, principal_id: str) -> bool:
+    """``Preware.requireAdminGroup('root')``: ``admin.isMemberOf('root')``."""
+    try:
+        user_oid = ObjectId(principal_id)
+    except (InvalidId, TypeError):
+        return False
+    user = db["users"].find_one({"_id": user_oid}, {"roles": 1})
+    roles = (user or {}).get("roles")
+    admin_role = roles.get("admin") if isinstance(roles, dict) else None
+    admin_id = admin_role.get("id") if isinstance(admin_role, dict) else None
+    if not isinstance(admin_id, str):
+        return False
+    try:
+        admin_oid = ObjectId(admin_id)
+    except InvalidId:
+        return False
+    admin = db["admins"].find_one({"_id": admin_oid}, {"groups": 1})
+    groups = (admin or {}).get("groups")
+    return isinstance(groups, dict) and "root" in groups
+
+
+def _fail(step: str, exc: BaseException) -> None:
+    logger.error("frame_participants/create failed at %s: %s", step, exc.__class__.__name__)
+
+
+def _compensate(db: Any, inserted: list[tuple[str, ObjectId]], sync_users: SyncUserRepository[Any], couch_id: str) -> None:
+    """Undo a partial create: inserted Mongo documents (newest first), then
+    the SG user. Each step is attempted even if an earlier one fails."""
+    for collection, oid in reversed(inserted):
+        try:
+            db[collection].delete_one({"_id": oid})
+        except Exception as exc:
+            _fail(f"compensate-{collection}-delete", exc)
+    try:
+        sync_users.delete(couch_id)
+    except Exception as exc:
+        _fail("compensate-sg-delete", exc)
+
+
 async def create_participant(
     request: Request,
     principal: Annotated[Principal, Depends(get_principal)],
 ) -> Response:
-    """RED stub."""
-    return internal()
+    step = "deps"
+    try:
+        deps: FrameParticipantDeps = request.app.state.frame_participant_deps
+
+        step = "payload"
+        parsed = await read_hapi_payload(request)
+        if parsed.response is not None:
+            return parsed.response
+
+        step = "scope"
+        if "admin" not in principal.roles:
+            return boom(403, "Insufficient scope")
+
+        step = "validate"
+        try:
+            body = validate_create_payload(parsed.payload)
+        except ParticipantValidationError:
+            return boom(400, "Invalid request payload input")
+
+        db = deps.db
+        step = "admin-group"
+        if not _is_root_admin(db, principal.id):
+            return boom(403, "Missing required group membership.")
+
+        step = "username-check"
+        if db["users"].find_one({"username": body["username"]}, {"_id": 1}) is not None:
+            return boom(409, "Username already in use.")
+
+        step = "email-check"
+        if db["users"].find_one({"email": body["email"]}, {"_id": 1}) is not None:
+            return boom(409, "Email already in use.")
+
+        step = "study-check"
+        study_oid = ObjectId(body["studyId"])  # frame's Study.findById throws -> 500
+        if db["studies"].find_one({"_id": study_oid}, {"_id": 1}) is None:
+            return boom(404, "Study not found for studyId.")
+
+        step = "pid-check"
+        if "id" in body:
+            pid = ObjectId(body["id"])  # frame's Participant.findById throws -> 500
+            if db["participants"].find_one({"_id": pid}, {"_id": 1}) is not None:
+                return boom(409, "Participant ID already in use.")
+        else:
+            pid = ObjectId()
+        couch_id = str(pid)
+
+        step = "build"
+        now = deps.clock()
+        try:
+            participant_doc = build_participant_doc(body, pid, study_oid, now)
+            user_doc = build_user_doc(body, now)
+        except ValueError as exc:
+            # Values Joi accepts but frame then fails on mid-create (an
+            # uncastable assignedCoachId, a blank participantNumber): refused
+            # here, before anything is written anywhere.
+            _fail(step, exc)
+            return boom(400, CREATION_FAILED)
+        user_oid: ObjectId = user_doc["_id"]
+        pnum: str = participant_doc["participantNumber"]
+
+        step = "sg-config"
+        sync_users = deps.sync_users()
+
+        step = "sg-provision"
+        try:
+            sync_users.provision(couch_id, couch_id, sync_user_channels(couch_id, body["studyId"]))
+        except Exception as exc:
+            _fail(step, exc)
+            return boom(400, CREATION_FAILED)
+
+        inserted: list[tuple[str, ObjectId]] = []
+        try:
+            step = "participants-insert"
+            db["participants"].insert_one(participant_doc)
+            inserted.append(("participants", pid))
+
+            step = "users-insert"
+            db["users"].insert_one(user_doc)
+            inserted.append(("users", user_oid))
+
+            step = "participants-link-user"
+            db["participants"].update_one({"_id": pid}, {"$set": {"userId": user_oid}})
+
+            step = "users-link-participant"
+            db["users"].update_one(
+                {"_id": user_oid},
+                {"$set": {"roles.participant": {"pid": couch_id, "pnum": pnum}}},
+            )
+        except Exception as exc:
+            _fail(step, exc)
+            _compensate(db, inserted, sync_users, couch_id)
+            return boom(400, CREATION_FAILED)
+
+        step = "respond"
+        stored_participant = db["participants"].find_one({"_id": pid})
+        stored_user = db["users"].find_one({"_id": user_oid})
+        if stored_participant is None or stored_user is None:
+            raise LookupError("created documents not readable")
+        return JSONResponse(
+            participant_response(stored_participant, stored_user),
+            status_code=200,
+            headers=HAPI_HEADERS,
+            media_type=JSON_UTF8,
+        )
+    except Exception as exc:
+        _fail(step, exc)
+        return internal()

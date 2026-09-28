@@ -6,8 +6,11 @@ connection, and wires the resource modules so ``@inject`` markers
 resolve. Routes pull repositories through container providers — no
 hand-rolled ``app.state.repos`` map.
 
-The one exception is the event-handler routes, which read
-``app.state.event_handler_deps`` (see :mod:`openwellness_api.event_handlers`).
+The exceptions are the event-handler routes, which read
+``app.state.event_handler_deps`` (see :mod:`openwellness_api.event_handlers`),
+and frame's ``POST /api/participants``, which reads
+``app.state.frame_participant_deps`` (see
+:mod:`openwellness_api.frame_participants`).
 """
 
 import logging
@@ -24,6 +27,7 @@ from .deps.auth_container import AuthContainer
 from .errors.handlers import register_exception_handlers
 from .event_handlers import build_event_handler_deps, build_event_handlers_router
 from .event_handlers.celery_producer import ProducerSettings
+from .frame_participants import build_frame_participant_deps, build_frame_participants_router
 from .resources import RESOURCE_MODULES
 from .v1 import build_v1_router
 
@@ -137,6 +141,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             producer_settings=ProducerSettings(),
         )
 
+        # Frame's participant creation (HOOK-03): the same Mongo handle, and
+        # the SG admin repository built on first use from
+        # SYNC_GATEWAY_ADMIN_URL/SYNC_GATEWAY_DB. Unset keys log one WARNING
+        # naming them and make only this route answer 500 (T-10-39).
+        app.state.frame_participant_deps = build_frame_participant_deps(db=collection_repository)
+
         yield
     finally:
         try:
@@ -173,6 +183,11 @@ def create_app() -> FastAPI:
     # route-walking test pins. The router ends in a hapi-404 catch-all for
     # every other URI under /api/eventHandlers.
     app.include_router(build_event_handlers_router())
+    # Frame's participant creation at frame's path (D-11), outside /v1 but
+    # behind the same require_write_principal guard at the router level; the
+    # handler then applies frame's admin scope and root group. Built, not
+    # flipped: the edge's /api/participants group stays on frame (D-13).
+    app.include_router(build_frame_participants_router())
 
     # Liveness: its access-log line is filtered at startup (D-16, see lifespan).
     @app.get(LIVENESS_PATH, tags=["meta"])
