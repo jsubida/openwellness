@@ -20,12 +20,27 @@ class CouchbaseSettings(BaseSettings):
 
 
 class SyncGatewaySettings(BaseSettings):
+    """Sync Gateway endpoints.
+
+    ``url`` is the database URL the entity driver uses. ``admin_url`` and
+    ``db`` locate the admin interface (``:4985``) for sync-user provisioning.
+    They read ``SYNC_GATEWAY_ADMIN_URL`` and ``SYNC_GATEWAY_DB``: the keys
+    frame's ``couchbase-admin.js`` and the integration harness already use, so
+    a deployment passes frame's known-good values straight through.
+    """
+
     model_config = SettingsConfigDict(env_prefix="SYNC_GATEWAY_", extra="ignore")
 
     url: str = "http://localhost:4984/openwellness"
+    admin_url: str = ""
+    db: str = ""
 
     def get_url(self) -> str:
         return self.url
+
+    def admin_db_url(self) -> str:
+        """Stub until the GREEN commit."""
+        return ""
 
 
 class MongoSettings(BaseSettings):
