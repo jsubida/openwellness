@@ -97,7 +97,7 @@ Option 7B, a new scheduler task that does the reads, was rejected: it adds a sch
 
 ## Sync-user provisioning
 
-`POST /api/participants` provisions the Sync Gateway user **first**, with an idempotent `PUT /{db}/_user/{name}` on the admin interface, then writes Mongo in frame's order: `participants` insert, `users` insert, `$set userId`, `$set roles.participant`. If any Mongo step fails it deletes the inserted documents newest first, then the SG user. Frame creates both concurrently and its compensation deletes the wrong name; neither behaviour is reproduced.
+`POST /api/participants` provisions the Sync Gateway user **first**, with an idempotent `PUT /{db}/_user/{name}` on the admin interface, then writes Mongo in frame's order: `participants` insert, `users` insert, `$set userId`, `$set roles.participant`. If any Mongo step fails it deletes the inserted documents newest first, then the SG user if this request owns it: it inserted the participant, or SG answered 201 and the participant insert failed for a reason other than a duplicate key. Frame has the same check-then-create race on a supplied `id`; there, a duplicate `_id` means a concurrent create won, and its SG user is kept. Frame creates both concurrently and its compensation deletes the wrong name; neither behaviour is reproduced.
 
 - Authentication is the router-level `require_write_principal`; the handler then checks frame's `admin` scope and `root` group.
 - Validation replays frame's Joi on 75 of 76 captured payloads and all 4 raw bodies. A numeric string that overflows to Infinity (`"1e309"`) is `number.unsafe`, as in Joi. The one allowed divergence is Joi's IANA TLD list: `ow_api` accepts `a@example.invalidtld`, which Joi rejects.

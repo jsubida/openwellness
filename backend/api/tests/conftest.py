@@ -381,11 +381,13 @@ class RecordingSyncUsers(SyncUserRepository[Any]):
         self.users: dict[str, dict[str, Any]] = {}
         self.fail_provision: Exception | None = None
 
-    def provision(self, name: str, password: str, admin_channels: list[str]) -> None:
+    def provision(self, name: str, password: str, admin_channels: list[str]) -> bool:
         self._owner.calls.append(("sg.provision", (name, password, list(admin_channels))))
         if self.fail_provision is not None:
             raise self.fail_provision
+        created = name not in self.users  # SG: 201 create, 200 update
         self.users[name] = {"password": password, "admin_channels": list(admin_channels)}
+        return created
 
     def delete(self, name: str) -> None:
         self._owner.calls.append(("sg.delete", name))

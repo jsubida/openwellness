@@ -84,7 +84,8 @@ def test_provision_puts_exactly_name_password_admin_channels():
 @pytest.mark.parametrize("status", [200, 201])
 def test_provision_accepts_create_and_update(status):
     repo, session = _repo(_Response(status, {}))
-    repo.provision("c1", "c1", ["c1"])
+    # True only for 201: the caller then knows it created (and owns) the user.
+    assert repo.provision("c1", "c1", ["c1"]) is (status == 201)
     assert len(session.calls) == 1
 
 

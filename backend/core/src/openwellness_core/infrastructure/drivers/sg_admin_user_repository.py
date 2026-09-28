@@ -93,7 +93,7 @@ class SGAdminUserRepository(SyncUserRepository[SyncUser]):
             # class name only, and suppress the chained original.
             raise SyncUserProvisioningError(operation, None, exc.__class__.__name__) from None
 
-    def provision(self, name: str, password: str, admin_channels: list[str]) -> None:
+    def provision(self, name: str, password: str, admin_channels: list[str]) -> bool:
         response = self._call(
             "provision",
             "PUT",
@@ -102,6 +102,7 @@ class SGAdminUserRepository(SyncUserRepository[SyncUser]):
         )
         if response.status_code not in _OK_WRITE:
             raise SyncUserProvisioningError("provision", response.status_code, _reason(response))
+        return response.status_code == 201
 
     def save(self, user: SyncUser) -> SyncUser:
         response = self._call(

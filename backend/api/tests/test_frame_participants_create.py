@@ -290,6 +290,58 @@ def test_users_insert_failure_deletes_the_participant_then_the_sg_user(client, r
     assert pid not in participant_fakes.sync_users.users
 
 
+# SG provisioning is an upsert (201 create, 200 update). Two creates with the
+# same supplied id can both pass the pre-check; the unique participants _id
+# decides which one owns the SG user, and a loser must not delete it.
+
+
+@pytest.mark.parametrize("sg_existed", [False, True], ids=["sg-201", "sg-200"])
+def test_duplicate_participant_insert_never_deletes_the_rivals_sg_user(
+    client, root, participant_fakes, sg_existed
+):
+    headers, study = root
+    pid = str(ObjectId())
+    if sg_existed:  # a rival provisioned first: this request's PUT answers 200
+        participant_fakes.sync_users.users[pid] = {"password": pid, "admin_channels": [pid]}
+    participant_fakes.fail_on[("participants", "insert_one")] = DuplicateKeyError(
+        "E11000 duplicate key error collection: participants index: _id_"
+    )
+    resp = client.post(PATH, json=_body(study, id=pid), headers=headers)
+    _boom(resp, 400, "Bad Request", "Participant creation failed.")
+    assert participant_fakes.writes() == ["sg.provision", "participants.insert_one"]
+    assert pid in participant_fakes.sync_users.users
+
+
+@pytest.mark.parametrize(
+    ("sg_existed", "deleted"), [(False, True), (True, False)], ids=["sg-201", "sg-200"]
+)
+def test_other_participant_insert_failure_deletes_only_an_sg_user_it_created(
+    client, root, participant_fakes, sg_existed, deleted
+):
+    headers, study = root
+    pid = str(ObjectId())
+    if sg_existed:
+        participant_fakes.sync_users.users[pid] = {"password": pid, "admin_channels": [pid]}
+    participant_fakes.fail_on[("participants", "insert_one")] = RuntimeError("write failed")
+    resp = client.post(PATH, json=_body(study, id=pid), headers=headers)
+    _boom(resp, 400, "Bad Request", "Participant creation failed.")
+    assert ("sg.delete" in participant_fakes.writes()) is deleted
+    assert (pid in participant_fakes.sync_users.users) is not deleted
+
+
+def test_after_its_participant_insert_the_request_owns_even_an_updated_sg_user(
+    client, root, participant_fakes
+):
+    headers, study = root
+    pid = str(ObjectId())
+    participant_fakes.sync_users.users[pid] = {"password": pid, "admin_channels": [pid]}  # 200
+    participant_fakes.fail_on[("users", "insert_one")] = RuntimeError("write failed")
+    resp = client.post(PATH, json=_body(study, id=pid), headers=headers)
+    _boom(resp, 400, "Bad Request", "Participant creation failed.")
+    assert participant_fakes.writes()[-2:] == ["participants.delete_one", "sg.delete"]
+    assert pid not in participant_fakes.sync_users.users
+
+
 @pytest.mark.parametrize("failing", [("participants", "update_one"), ("users", "update_one")])
 def test_link_failure_deletes_both_documents_then_the_sg_user(client, root, participant_fakes, failing):
     headers, study = root

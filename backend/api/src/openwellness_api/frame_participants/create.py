@@ -18,7 +18,8 @@ usernameCheck, emailCheck, study, pid]``):
    credentials (D-14); a failure answers 400 and nothing reaches Mongo;
 8. Mongo: insert ``participants``, insert ``users``, ``$set userId``,
    ``$set roles.participant``. Any failure deletes the inserted documents,
-   then the SG user, and answers 400 ``Participant creation failed.``
+   then the SG user if this request owns it (see :func:`_owns_sync_user`),
+   and answers 400 ``Participant creation failed.``
    (deviation D-b: frame echoes the internal error; its concurrent create and
    broken compensation are not reproduced);
 9. both documents are re-read and returned in frame's shape.
@@ -38,6 +39,7 @@ from typing import Annotated, Any, Final
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import Depends, Request
+from pymongo.errors import DuplicateKeyError
 from starlette.responses import JSONResponse, Response
 
 from openwellness_core.application.repositories.sync_user_repository import (
@@ -110,14 +112,45 @@ def _fail(step: str, exc: BaseException) -> None:
     logger.error("frame_participants/create failed at %s: %s", step, exc.__class__.__name__)
 
 
-def _compensate(db: Any, inserted: list[tuple[str, ObjectId]], sync_users: SyncUserRepository[Any], couch_id: str) -> None:
+def _owns_sync_user(
+    inserted: list[tuple[str, ObjectId]], sg_created: bool, exc: BaseException
+) -> bool:
+    """Whether a failed create may delete the SG user it provisioned.
+
+    Provisioning is an upsert, so two creates with the same supplied ``id``
+    can both pass the pre-check and provision the same SG user. The unique
+    ``participants`` ``_id`` decides which one owns it:
+
+    - this request inserted the participant: it owns the id, and any rival
+      fails that insert, so the SG user is its to delete;
+    - the participant insert hit a duplicate key: a rival owns the id and
+      its SG user, which must survive;
+    - the participant insert failed otherwise: delete only a user this
+      request created (SG answered 201), never one that already existed.
+    """
+    if inserted:
+        return True
+    return sg_created and not isinstance(exc, DuplicateKeyError)
+
+
+def _compensate(
+    db: Any,
+    inserted: list[tuple[str, ObjectId]],
+    sync_users: SyncUserRepository[Any],
+    couch_id: str,
+    delete_sync_user: bool,
+) -> None:
     """Undo a partial create: inserted Mongo documents (newest first), then
-    the SG user. Each step is attempted even if an earlier one fails."""
+    the SG user when this request owns it. Each step is attempted even if an
+    earlier one fails."""
     for collection, oid in reversed(inserted):
         try:
             db[collection].delete_one({"_id": oid})
         except Exception as exc:
             _fail(f"compensate-{collection}-delete", exc)
+    if not delete_sync_user:
+        logger.warning("frame_participants/create kept the SG user it does not own")
+        return
     try:
         sync_users.delete(couch_id)
     except Exception as exc:
@@ -193,7 +226,9 @@ async def create_participant(
 
         step = "sg-provision"
         try:
-            sync_users.provision(couch_id, couch_id, sync_user_channels(couch_id, body["studyId"]))
+            sg_created = sync_users.provision(
+                couch_id, couch_id, sync_user_channels(couch_id, body["studyId"])
+            )
         except Exception as exc:
             _fail(step, exc)
             return boom(400, CREATION_FAILED)
@@ -218,7 +253,9 @@ async def create_participant(
             )
         except Exception as exc:
             _fail(step, exc)
-            _compensate(db, inserted, sync_users, couch_id)
+            _compensate(
+                db, inserted, sync_users, couch_id, _owns_sync_user(inserted, sg_created, exc)
+            )
             return boom(400, CREATION_FAILED)
 
         step = "respond"

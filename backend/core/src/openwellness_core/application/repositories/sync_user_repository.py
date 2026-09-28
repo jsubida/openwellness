@@ -25,11 +25,13 @@ class SyncUserRepository(ABC, Generic[SomeSyncUser]):
         """
 
     @abstractmethod
-    def provision(self, name: str, password: str, admin_channels: list[str]) -> None:
+    def provision(self, name: str, password: str, admin_channels: list[str]) -> bool:
         """Create the user, or update it if it already exists.
 
         Idempotent: provisioning the same name twice leaves one user with the
-        given password and admin channels.
+        given password and admin channels. Returns ``True`` when this call
+        created the user and ``False`` when it updated an existing one, so a
+        caller undoing a failed create deletes only a user it created.
         """
 
     @abstractmethod
