@@ -278,6 +278,57 @@ from openwellness_api.resources import RESOURCE_MODULES
 _WIRED_MODULES = [mod.__name__ for mod in RESOURCE_MODULES]
 
 
+class FakeEventSettings:
+    """``ComponentSettingsReader`` fake keyed like frame's view query."""
+
+    def __init__(self) -> None:
+        self.rows: dict[tuple[Any, int], dict[str, Any]] = {}
+        self.calls: list[tuple[Any, int]] = []
+
+    def first(self, study_id: object, component_type: int) -> dict[str, Any] | None:
+        self.calls.append((study_id, component_type))
+        return self.rows.get((study_id, component_type))
+
+
+class FakeEventStudies:
+    """``StudyReader`` fake (frame's ``Study.findById``)."""
+
+    def __init__(self) -> None:
+        self.docs: dict[Any, dict[str, Any]] = {}
+        self.calls: list[object] = []
+
+    def find_by_id(self, study_id: object) -> dict[str, Any] | None:
+        self.calls.append(study_id)
+        return self.docs.get(study_id)
+
+
+class RecordingEventPublisher:
+    """``TaskPublisher`` fake that records ``(task_name, args)``."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[Any]]] = []
+
+    def publish(self, task_name: str, args: list[Any]) -> None:
+        self.calls.append((task_name, args))
+
+
+@pytest.fixture
+def event_fakes():
+    """Read-only fakes plus a recording publisher for the event-handler routes.
+
+    The ``app`` fixture installs them as ``app.state.event_handler_deps``; a
+    test seeds ``event_fakes.settings.rows`` / ``event_fakes.studies.docs``
+    and reads ``event_fakes.publisher.calls``.
+    """
+    from openwellness_api.event_handlers.ports import EventHandlerDeps
+
+    return EventHandlerDeps(
+        settings=FakeEventSettings(),
+        studies=FakeEventStudies(),
+        publisher=RecordingEventPublisher(),
+    )
+
+
 @pytest.fixture
 def fake_email_sender():
     """Function-scoped in-memory OTP email recorder.
@@ -292,7 +343,7 @@ def fake_email_sender():
 
 
 @pytest.fixture
-def app(fakes: dict[type, Any], fake_email_sender):
+def app(fakes: dict[type, Any], fake_email_sender, event_fakes):
     """App with fakes wired through an ``ApplicationContainer`` instance.
 
     We bypass the real lifespan (no Couchbase/Mongo connection), build a
@@ -300,6 +351,8 @@ def app(fakes: dict[type, Any], fake_email_sender):
     and wire the resource modules so ``@inject`` markers see the overrides. An
     ``AuthContainer`` is also built and attached with real collaborators backed
     by fakeredis/mongomock + a real clock, so the auth router works end-to-end.
+    The event-handler router is included as ``create_app()`` includes it, with
+    ``event_fakes`` as its deps.
     """
     import fakeredis
     import mongomock
@@ -311,11 +364,14 @@ def app(fakes: dict[type, Any], fake_email_sender):
     from openwellness_api.container import ApplicationContainer
     from openwellness_api.deps.auth_container import AuthContainer, default_clock
     from openwellness_api.errors.handlers import register_exception_handlers
+    from openwellness_api.event_handlers import build_event_handlers_router
     from openwellness_api.v1 import build_v1_router
 
     instance = FastAPI(title="OpenWellness API (test)")
     register_exception_handlers(instance)
     instance.include_router(build_v1_router())
+    instance.include_router(build_event_handlers_router())
+    instance.state.event_handler_deps = event_fakes
 
     container = ApplicationContainer()
     for iface, fake in fakes.items():
