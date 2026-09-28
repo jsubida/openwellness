@@ -231,3 +231,66 @@ def test_none_is_none_without_a_query(db: Any) -> None:
 def test_malformed_id_raises_invalid_id(db: Any) -> None:
     with pytest.raises(InvalidId):
         MongoStudyReader(db).find_by_id("not-an-object-id")
+
+
+# --------------------------------------------------------------------------- #
+# Production wiring (the lifespan's build_event_handler_deps)
+# --------------------------------------------------------------------------- #
+
+
+def test_build_event_handler_deps_wires_the_real_readers_and_publisher(
+    db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openwellness_api.event_handlers import build_event_handler_deps
+    from openwellness_api.event_handlers.celery_producer import (
+        CeleryTaskPublisher,
+        ProducerSettings,
+    )
+
+    monkeypatch.setenv("CELERY_BROKER_URL", "memory://")
+    bucket = FakeBucket([_setting_row("doc-1", 1)])
+
+    deps = build_event_handler_deps(
+        bucket=bucket, db=db, producer_settings=ProducerSettings()
+    )
+
+    assert isinstance(deps.settings, CouchbaseViewSettingsReader)
+    assert isinstance(deps.studies, MongoStudyReader)
+    assert isinstance(deps.publisher, CeleryTaskPublisher)
+    assert deps.settings.first("s1", 2) == {**_setting_row("doc-1", 1).value, "id": "doc-1"}
+
+
+def test_unset_broker_url_logs_one_warning_naming_only_the_key(
+    db: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from openwellness_api.event_handlers import build_event_handler_deps
+    from openwellness_api.event_handlers.celery_producer import ProducerSettings
+
+    monkeypatch.delenv("CELERY_BROKER_URL", raising=False)
+
+    with caplog.at_level("WARNING"):
+        build_event_handler_deps(
+            bucket=FakeBucket(), db=db, producer_settings=ProducerSettings()
+        )
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "CELERY_BROKER_URL" in warnings[0].getMessage()
+
+
+def test_set_broker_url_logs_nothing_and_never_its_value(
+    db: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from openwellness_api.event_handlers import build_event_handler_deps
+    from openwellness_api.event_handlers.celery_producer import ProducerSettings
+
+    secret = "redis://:sentinel-pass-91c2@redis:6379/0"
+    monkeypatch.setenv("CELERY_BROKER_URL", secret)
+
+    with caplog.at_level("DEBUG"):
+        build_event_handler_deps(
+            bucket=FakeBucket(), db=db, producer_settings=ProducerSettings()
+        )
+
+    assert [r for r in caplog.records if r.levelname == "WARNING"] == []
+    assert "sentinel-pass-91c2" not in caplog.text

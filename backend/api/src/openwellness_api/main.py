@@ -5,6 +5,9 @@ The lifespan builds an :class:`ApplicationContainer`, binds the concrete
 connection, and wires the resource modules so ``@inject`` markers
 resolve. Routes pull repositories through container providers — no
 hand-rolled ``app.state.repos`` map.
+
+The one exception is the event-handler routes, which read
+``app.state.event_handler_deps`` (see :mod:`openwellness_api.event_handlers`).
 """
 
 import logging
@@ -19,6 +22,8 @@ from .config import APISettings, AppConfig
 from .container import ApplicationContainer
 from .deps.auth_container import AuthContainer
 from .errors.handlers import register_exception_handlers
+from .event_handlers import build_event_handler_deps, build_event_handlers_router
+from .event_handlers.celery_producer import ProducerSettings
 from .resources import RESOURCE_MODULES
 from .v1 import build_v1_router
 
@@ -96,9 +101,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # container; hand it to the auth container so its session store can use
         # it. If this (or ensure_indexes / redis construction) raises, the
         # finally: below still cleans up the already-open Couchbase cluster.
-        coll = container.repositories.collection_repository()[
-            s.refresh_collection
-        ]
+        collection_repository = container.repositories.collection_repository()
+        coll = collection_repository[s.refresh_collection]
         auth_container.refresh_collection.override(providers.Object(coll))
         auth_container.session_store().ensure_indexes()
 
@@ -113,6 +117,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.warning("Redis not reachable at startup; continuing anyway")
 
         app.state.auth_container = auth_container
+
+        # Event-handler deps (HOOK-01): frame's own Couchbase view on the
+        # bucket the entity repository already opened (no second cluster
+        # connection), frame's ``studies`` collection on the same Mongo
+        # handle, and the Celery producer for the queue ``router`` consumes.
+        # The producer connects lazily, so an unset CELERY_BROKER_URL does
+        # not stop boot; it logs one warning and every publish answers 500.
+        entity_repository = container.repositories.entity_repository()
+        app.state.event_handler_deps = build_event_handler_deps(
+            bucket=entity_repository.cluster.bucket(entity_repository.bucket_name),
+            db=collection_repository,
+            producer_settings=ProducerSettings(),
+        )
 
         yield
     finally:
@@ -144,6 +161,12 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(build_v1_router())
+    # Externally registered vendor and Sync Gateway contracts (HOOK-01/02),
+    # outside /v1 so require_write_principal never applies. Unauthenticated by
+    # design, matching frame's ``auth: false``, with a per-route marker the
+    # route-walking test pins. The router ends in a hapi-404 catch-all for
+    # every other URI under /api/eventHandlers.
+    app.include_router(build_event_handlers_router())
 
     # Liveness: its access-log line is filtered at startup (D-16, see lifespan).
     @app.get(LIVENESS_PATH, tags=["meta"])
