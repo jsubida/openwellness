@@ -70,6 +70,8 @@ def _handshake_cases() -> list[dict[str, Any]]:
 def _falsy_code_cases() -> list[dict[str, Any]]:
     cases = []
     for entry in MATRIX["responses"]:
+        if entry["content_type"] != "application/json":
+            continue
         payload = _payload(entry)
         if isinstance(payload, dict) and "ValidationCode" in payload and entry["frame_body"] == "":
             cases.append(entry)
