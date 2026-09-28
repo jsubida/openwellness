@@ -236,3 +236,86 @@ def test_deep_invalid_json_is_400(raw: bytes) -> None:
     assert json.loads(bytes(result.response.body))["message"] == (
         "Invalid request payload JSON format"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Numbers are doubles, as JSON.parse makes them
+# --------------------------------------------------------------------------- #
+
+# ``JSON.stringify({a: JSON.parse(literal)})`` captured with ``node -e`` in
+# frame's api container. node-celery publishes task arguments with
+# JSON.stringify, so these are the exact bytes frame puts on the broker.
+V8_NUMBER_ROUND_TRIPS = [
+    ("9007199254740993", '{"a":9007199254740992}'),
+    ("9007199254740992", '{"a":9007199254740992}'),
+    ("123", '{"a":123}'),
+    ("1.0", '{"a":1}'),
+    ("-0", '{"a":0}'),
+    ("1e21", '{"a":1e+21}'),
+    ("100000000000000000000", '{"a":100000000000000000000}'),
+    ("123456789012345678901234", '{"a":1.2345678901234569e+23}'),
+    ("1.5e300", '{"a":1.5e+300}'),
+]
+
+
+@pytest.mark.parametrize(("literal", "v8"), V8_NUMBER_ROUND_TRIPS)
+def test_json_numbers_round_trip_like_v8(literal: str, v8: str) -> None:
+    from openwellness_api.event_handlers.hapi import parse_hapi_payload
+
+    result = parse_hapi_payload("application/json", b'{"a":' + literal.encode() + b"}")
+
+    assert result.response is None
+    assert json.dumps(result.payload, separators=(",", ":")) == v8
+
+
+@pytest.mark.parametrize(("literal", "v8"), V8_NUMBER_ROUND_TRIPS)
+def test_deep_json_numbers_round_trip_like_v8(literal: str, v8: str) -> None:
+    """The iterative fallback parser applies the same number rule."""
+    from openwellness_api.event_handlers.hapi import parse_hapi_payload
+
+    depth = 5000
+    raw = b'{"a":' + b"[" * depth + literal.encode() + b"]" * depth + b"}"
+
+    result = parse_hapi_payload("application/json", raw)
+
+    assert result.response is None
+    node = result.payload["a"]
+    for _ in range(depth):
+        node = node[0]
+    assert json.dumps({"a": node}, separators=(",", ":")) == v8
+
+
+@pytest.mark.parametrize("deep", [False, True])
+def test_integral_numbers_stay_int_and_overflow_is_infinity(deep: bool) -> None:
+    from openwellness_api.event_handlers.hapi import parse_hapi_payload
+
+    items = b"[123,1.0,-0,9007199254740993,0.5,1e21," + b"1" + b"0" * 400 + b"]"
+    raw = b"[" * 5000 + items + b"]" * 5000 if deep else items
+
+    result = parse_hapi_payload("application/json", raw)
+
+    assert result.response is None
+    values = result.payload
+    while deep and isinstance(values[0], list):
+        values = values[0]
+    assert [type(v) for v in values] == [int, int, int, int, float, float, float]
+    assert values[:4] == [123, 1, 0, 9007199254740992]
+    assert values[6] == float("inf")  # JSON.parse gives Infinity
+
+
+def test_published_owner_is_rounded_like_frame(client: TestClient, event_fakes: Any) -> None:
+    event_fakes.settings.rows[("s1", 2)] = {
+        "studyId": "s1",
+        "fitbitHeartObserver": "jobs.fitbit.heart",
+    }
+
+    resp = client.post(
+        PATH,
+        content=b'{"studyId":"s1","owner":9007199254740993}',
+        headers={"content-type": "application/json"},
+    )
+
+    assert resp.status_code == 204
+    assert event_fakes.publisher.calls == [("jobs.fitbit.heart", [9007199254740992])]
+    (_, args), = event_fakes.publisher.calls
+    assert json.dumps(args) == "[9007199254740992]"

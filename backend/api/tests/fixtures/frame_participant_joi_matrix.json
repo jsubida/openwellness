@@ -1136,5 +1136,56 @@
    "joi_error": "object.base",
    "joi_value": null
   }
+ ],
+ "body_cases": [
+  {
+   "id": "ptype_json_overflow",
+   "body": "{\"studyId\":\"0123456789abcdef01234567\",\"username\":\"Alice_1\",\"password\":\"pw\",\"email\":\"Alice@Example.com\",\"participantNumber\":\" P-001 \",\"participantType\":1e400}",
+   "joi_ok": false,
+   "joi_error": "number.infinity",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_json_big_int",
+   "body": "{\"studyId\":\"0123456789abcdef01234567\",\"username\":\"Alice_1\",\"password\":\"pw\",\"email\":\"Alice@Example.com\",\"participantNumber\":\" P-001 \",\"participantType\":9007199254740993}",
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_json_float_integral",
+   "body": "{\"studyId\":\"0123456789abcdef01234567\",\"username\":\"Alice_1\",\"password\":\"pw\",\"email\":\"Alice@Example.com\",\"participantNumber\":\" P-001 \",\"participantType\":2.0}",
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "participantType": 2,
+    "location": "",
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "gender_json_float_integral",
+   "body": "{\"studyId\":\"0123456789abcdef01234567\",\"username\":\"Alice_1\",\"password\":\"pw\",\"email\":\"Alice@Example.com\",\"participantNumber\":\" P-001 \",\"gender\":1.0}",
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "gender": 1,
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  }
  ]
 }

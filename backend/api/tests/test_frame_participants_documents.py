@@ -24,6 +24,9 @@ from openwellness_api.frame_participants.documents import (
 
 FIXTURE = Path(__file__).parent / "fixtures" / "frame_participant_joi_matrix.json"
 MATRIX = json.loads(FIXTURE.read_text())["cases"]
+# Raw request bodies whose numbers only JSON.parse can express (Infinity,
+# a double-rounded integer), replayed through the hapi parser first.
+BODY_MATRIX = json.loads(FIXTURE.read_text())["body_cases"]
 
 # Joi's email() checks the TLD against IANA's list; email-validator does not.
 # This is the ONLY case where ow and frame's Joi disagree, and it is recorded
@@ -85,6 +88,23 @@ def test_matches_frames_joi_verdict_and_converted_value(case):
     else:
         with pytest.raises(ParticipantValidationError):
             validate_create_payload(case["payload"])
+
+
+@pytest.mark.parametrize("case", BODY_MATRIX, ids=[c["id"] for c in BODY_MATRIX])
+def test_raw_body_numbers_reach_joi_as_frame_parses_them(case):
+    from openwellness_api.event_handlers.hapi import parse_hapi_payload
+
+    parsed = parse_hapi_payload("application/json", case["body"].encode())
+    assert parsed.response is None
+    if case["joi_ok"]:
+        out = validate_create_payload(parsed.payload)
+        assert out == case["joi_value"]
+        for key, value in case["joi_value"].items():
+            assert type(out[key]) is type(value), key
+    else:
+        with pytest.raises(ParticipantValidationError) as exc:
+            validate_create_payload(parsed.payload)
+        assert str(exc.value).endswith(case["joi_error"])
 
 
 def test_the_known_divergence_is_exactly_the_tld_allow_list():

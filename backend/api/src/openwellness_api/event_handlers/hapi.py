@@ -213,17 +213,29 @@ scanstring: Final[Callable[[str, int, bool], tuple[str, int]]] = getattr(
 )
 
 
-def _json_int(literal: str) -> int | float:
-    # Python refuses int() past 4300 digits; JSON.parse yields a double
-    # (Infinity once it overflows), which float() reproduces.
-    return int(literal) if len(literal) <= 4000 else float(literal)
+# From 1e21 up, JSON.stringify writes an integral double in exponent form
+# (``1e+21``), which a JSON reader (Celery's, downstream) reads as a float.
+_JS_EXPONENT_FORM: Final = 1e21
+
+
+def _json_number_literal(literal: str) -> int | float:
+    """A JSON number token as ``JSON.parse`` sees it: always a double.
+
+    ``float()`` rounds exactly as V8 does (9007199254740993 becomes
+    9007199254740992; past the double range, Infinity). An integral result
+    below 1e21 is returned as ``int``, so re-serialized task arguments read
+    ``1`` for ``1.0`` and keep integer digits, as ``JSON.stringify`` writes
+    them; larger or fractional values stay ``float``.
+    """
+    value = float(literal)
+    if math.isfinite(value) and value.is_integer() and abs(value) < _JS_EXPONENT_FORM:
+        return int(value)
+    return value
 
 
 def _json_number(match: re.Match[str]) -> int | float:
     integer, frac, exp = match.groups()
-    if frac or exp:
-        return float(integer + (frac or "") + (exp or ""))
-    return _json_int(integer)
+    return _json_number_literal(integer + (frac or "") + (exp or ""))
 
 
 def _loads_iterative(text: str) -> Any:
@@ -337,7 +349,10 @@ def _parse_json(raw: bytes) -> PayloadResult:
     try:
         try:
             value = json.loads(
-                text, parse_constant=_reject_constant, parse_int=_json_int
+                text,
+                parse_constant=_reject_constant,
+                parse_int=_json_number_literal,
+                parse_float=_json_number_literal,
             )
         except RecursionError:
             value = _loads_iterative(text)
