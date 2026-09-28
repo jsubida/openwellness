@@ -11,7 +11,7 @@
 
 The webhook routes are **enqueue-and-return**: they run frame's read-only pre chain to choose a task, publish frame's exact Celery task name and arguments onto the shared `celery` queue that the existing `router` worker consumes, and answer. Workers do not change, so moving a path group back to frame is a pure edge route change.
 
-Every response is byte-for-byte hapi parity. A caller cannot tell which service answered. Parity is defined by fixtures captured live from frame (api `6706a1e5`, hapi 21.4.10, node 22.23.1), not by reading frame's source, because the captures contradicted the source reading ten times (see Parity contract).
+Every response is byte-for-byte hapi parity. A caller cannot tell which service answered. Parity is defined by fixtures captured live from frame (api `6706a1e5`, hapi 21.4.10, node 22.23.1), not by reading frame's source, because the captures contradicted a reading of the source ten times in the payload rules alone (see Parity contract).
 
 Alternatives rejected:
 
