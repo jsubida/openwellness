@@ -39,8 +39,22 @@ class SyncGatewaySettings(BaseSettings):
         return self.url
 
     def admin_db_url(self) -> str:
-        """Stub until the GREEN commit."""
-        return ""
+        """Join ``admin_url`` and ``db`` the way frame's ``baseSGUrl`` does.
+
+        Raises ``ValueError`` naming the missing key when either is empty.
+        Evaluated only when called, so an unset key never blocks boot.
+        """
+        missing = [
+            key
+            for key, value in (
+                ("SYNC_GATEWAY_ADMIN_URL", self.admin_url),
+                ("SYNC_GATEWAY_DB", self.db),
+            )
+            if not value.strip()
+        ]
+        if missing:
+            raise ValueError(f"Sync Gateway admin settings not set: {', '.join(missing)}")
+        return f"{self.admin_url.strip().rstrip('/')}/{self.db.strip().strip('/')}"
 
 
 class MongoSettings(BaseSettings):

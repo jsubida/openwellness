@@ -33,9 +33,9 @@ class _StatusRecordingSession(requests.Session):
         super().__init__()
         self.statuses: list[tuple[str, int]] = []
 
-    def request(self, method: str | bytes, url: str | bytes, *args: Any, **kwargs: Any) -> requests.Response:  # type: ignore[override]
+    def request(self, method: str, url: str, *args: Any, **kwargs: Any) -> requests.Response:  # type: ignore[override]
         response = super().request(method, url, *args, **kwargs)
-        self.statuses.append((str(method), response.status_code))
+        self.statuses.append((method, response.status_code))
         return response
 
 
