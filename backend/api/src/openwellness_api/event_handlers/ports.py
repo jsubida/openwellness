@@ -7,10 +7,12 @@ the publisher that hands the task to Celery (D-01).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from starlette.requests import Request
+
+from .legacy_studies import LegacyStudyIdsProvider
 
 
 class ComponentSettingsReader(Protocol):
@@ -60,6 +62,12 @@ class EventHandlerDeps:
     settings: ComponentSettingsReader
     studies: StudyReader
     publisher: TaskPublisher
+    # ``STUDY_SPECIFIC``'s legacy ids, parsed on first use: an absent or
+    # unparseable key is a hapi 500 on the routes that need it, never a
+    # boot failure and never a guess that a study is non-legacy (D-03).
+    legacy_studies: LegacyStudyIdsProvider = field(
+        default_factory=LegacyStudyIdsProvider.from_process_env
+    )
 
 
 def get_event_handler_deps(request: Request) -> EventHandlerDeps:

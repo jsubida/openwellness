@@ -26,9 +26,11 @@ EXPECTED_EXEMPTIONS = {
     "/v1/auth:verifyRegistrationCode",
     "/v1/auth:refreshToken",
     "/v1/auth:revokeToken",
-    # Sync Gateway webhook (HOOK-01) and the hapi-404 catch-all for every
+    # Sync Gateway webhooks (HOOK-01) and the hapi-404 catch-all for every
     # other URI under the SG prefix.
+    "/api/eventHandlers/activity",
     "/api/eventHandlers/fitbitHeartRecord",
+    "/api/eventHandlers/post",
     "/api/eventHandlers{rest:path}",
 }
 
