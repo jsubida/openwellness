@@ -38,7 +38,7 @@ from .hapi import (
     js_length,
     js_strict_equals_zero,
     js_string,
-    parse_json_payload,
+    read_hapi_payload,
 )
 from .ports import EventHandlerDeps, get_event_handler_deps
 
@@ -146,9 +146,16 @@ def _owner_only(payload: dict[str, Any]) -> list[Any]:
 
 
 async def dispatch(request: Request, route: str, core: Core) -> Response:
-    """Parse, read deps, run the synchronous core; any failure is hapi 500."""
+    """Parse as hapi does, read deps, run the synchronous core.
+
+    A payload hapi refuses (400/413/415) answers before any lookup; any
+    other failure is hapi 500.
+    """
     try:
-        payload = parse_json_payload(await request.body())
+        parsed = await read_hapi_payload(request)
+        if parsed.response is not None:
+            return parsed.response
+        payload = parsed.payload
         deps = get_event_handler_deps(request)
         return await run_in_threadpool(core, payload, deps)
     except HapiReply as reply:

@@ -233,6 +233,6 @@ def test_deep_invalid_json_is_400(raw: bytes) -> None:
 
     assert result.response is not None
     assert result.response.status_code == 400
-    assert json.loads(result.response.body)["message"] == (
+    assert json.loads(bytes(result.response.body))["message"] == (
         "Invalid request payload JSON format"
     )
