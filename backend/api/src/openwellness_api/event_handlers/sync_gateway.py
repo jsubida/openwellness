@@ -46,9 +46,12 @@ logger = logging.getLogger(__name__)
 
 # api/server/models/mongoose/studyComponent.js cType.
 ACTIVITY: Final = 2
+SOCIAL: Final = 4
 
 PREFIX: Final = "/api/eventHandlers"
+ACTIVITY_PATH: Final = f"{PREFIX}/activity"
 FITBIT_HEART_RECORD_PATH: Final = f"{PREFIX}/fitbitHeartRecord"
+POST_PATH: Final = f"{PREFIX}/post"
 
 Core = Callable[[Any, EventHandlerDeps], Response]
 ArgsOf = Callable[[dict[str, Any]], list[Any]]
@@ -123,6 +126,19 @@ def publish_observer(
     deps.publisher.publish(task_name, args)
 
 
+def pre_chain(
+    payload: Any, deps: EventHandlerDeps, *, component_type: int, observer: str
+) -> tuple[Any, Any]:
+    """requireStudyId -> requireComponentSetting -> requireObserverName.
+
+    Returns ``(studyId, observer task name)``, frame's
+    ``request.payload.studyId`` and ``request.pre.observerName``.
+    """
+    study_id = require_study_id(payload)
+    setting = require_component_setting(deps, study_id, component_type)
+    return study_id, require_observer_name(deps, setting, observer)
+
+
 def observer_core(
     payload: Any,
     deps: EventHandlerDeps,
@@ -132,17 +148,39 @@ def observer_core(
     observer: str,
     args_of: ArgsOf,
 ) -> Response:
-    """requireStudyId -> requireComponentSetting -> requireObserverName -> publish."""
-    study_id = require_study_id(payload)
-    setting = require_component_setting(deps, study_id, component_type)
-    task_name = require_observer_name(deps, setting, observer)
+    """The pre chain, then publish the observer task and ``return null``."""
+    _, task_name = pre_chain(
+        payload, deps, component_type=component_type, observer=observer
+    )
     publish_observer(deps, route, task_name, args_of(payload))
+    return empty_null()
+
+
+def activity_core(payload: Any, deps: EventHandlerDeps) -> Response:
+    """``POST /eventHandlers/activity`` (event-handlers.js:139-166)."""
+    study_id, task_name = pre_chain(
+        payload, deps, component_type=ACTIVITY, observer="activityObserver"
+    )
+    if deps.legacy_studies.get().contains(study_id):
+        # D-03: frame's ``processLegacyActivity`` is dead and deliberately not
+        # ported. It never enqueues; it only reads the participant and the
+        # latest Condition, then returns ``null``. Its one observable
+        # difference is that it returns ``''`` (204 ``text/html``) when a
+        # legacy participant has no Condition, and that branch is out of
+        # scope. So a legacy study answers 204 with no reads and no task.
+        return empty_null()
+    publish_observer(deps, "activity", task_name, _owner_only(payload))
     return empty_null()
 
 
 def _owner_only(payload: dict[str, Any]) -> list[Any]:
     # `[payloadDoc.owner]`; a missing owner is undefined -> JSON null.
     return [payload.get("owner")]
+
+
+def _owner_and_id(payload: dict[str, Any]) -> list[Any]:
+    # `[payloadDoc.owner, payloadDoc._id]`; each missing key -> JSON null.
+    return [payload.get("owner"), payload.get("_id")]
 
 
 async def dispatch(request: Request, route: str, core: Core) -> Response:
@@ -172,10 +210,23 @@ def _handler(route: str, core: Core) -> Callable[[Request], Awaitable[Response]]
     return handle
 
 
-def build_sync_gateway_router() -> APIRouter:
-    router = APIRouter()
+def _register(router: APIRouter, path: str, route: str, core: Core) -> None:
+    # Unauthenticated per route, as frame's ``auth: false`` (the route-walking
+    # test pins every marker). A literal path, POST only.
+    router.post(
+        path,
+        openapi_extra={ALLOW_UNAUTHENTICATED: True},
+        name=route,
+    )(_handler(route, core))
 
-    fitbit_heart_record = _handler(
+
+def build_sync_gateway_router() -> APIRouter:
+    """The SG routes. ``build_event_handlers_router`` adds the catch-all after them."""
+    router = APIRouter()
+    _register(router, ACTIVITY_PATH, "activity", activity_core)
+    _register(
+        router,
+        FITBIT_HEART_RECORD_PATH,
         "fitbitHeartRecord",
         partial(
             observer_core,
@@ -185,10 +236,16 @@ def build_sync_gateway_router() -> APIRouter:
             args_of=_owner_only,
         ),
     )
-    router.post(
-        FITBIT_HEART_RECORD_PATH,
-        openapi_extra={ALLOW_UNAUTHENTICATED: True},
-        name="fitbitHeartRecord",
-    )(fitbit_heart_record)
-
+    _register(
+        router,
+        POST_PATH,
+        "post",
+        partial(
+            observer_core,
+            route="post",
+            component_type=SOCIAL,
+            observer="postObserver",
+            args_of=_owner_and_id,
+        ),
+    )
     return router
