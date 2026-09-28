@@ -38,7 +38,14 @@ logger = logging.getLogger(__name__)
 # parameter directly after a literal segment, and the ``path`` convertor
 # matches the empty string.
 CATCH_ALL_PATH: Final = PREFIX + "{rest:path}"
-CATCH_ALL_METHODS: Final = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+# Frame answers TRACE with the same 404 (captured). CONNECT is left out on
+# purpose: Node hands it to the server's 'connect' event, and with no
+# listener frame closes the socket without any response, which a route
+# cannot reproduce. Edge nginx answers CONNECT (400) and TRACE (405)
+# itself, so neither reaches an upstream in production.
+CATCH_ALL_METHODS: Final = [
+    "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE",
+]
 
 
 async def _hapi_not_found(rest: str) -> Response:

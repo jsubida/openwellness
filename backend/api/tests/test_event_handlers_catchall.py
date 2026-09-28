@@ -80,6 +80,13 @@ def test_wrong_method_on_a_real_route_is_hapi_404_not_405(
     _assert_hapi_404(resp)
 
 
+@pytest.mark.parametrize("path", [ROUTE, "/api/eventHandlers/nope"])
+def test_trace_is_hapi_404_not_405(client: TestClient, path: str) -> None:
+    # Captured from frame: TRACE on both a real and an unknown path is 404.
+    resp = client.request("TRACE", path, follow_redirects=False)
+    _assert_hapi_404(resp)
+
+
 def test_head_on_a_real_route_is_404(client: TestClient) -> None:
     resp = client.head(ROUTE, follow_redirects=False)
     assert resp.status_code == 404
@@ -133,4 +140,8 @@ def test_catch_all_is_unauthenticated_and_hidden_from_the_schema() -> None:
     )
     assert (route.openapi_extra or {}).get(ALLOW_UNAUTHENTICATED) is True
     assert route.include_in_schema is False
-    assert route.methods == {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+    assert route.methods == {
+        "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE",
+    }
+    # Frame closes the socket on CONNECT with no response; no 404 to copy.
+    assert "CONNECT" not in route.methods
