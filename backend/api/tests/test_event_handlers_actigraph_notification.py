@@ -197,6 +197,31 @@ def test_dst_ambiguous_and_gap_are_reproduced_exactly() -> None:
     assert dates["dst_gap"]["v8"] == "2020-03-08T08:30:00.000Z"
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # Python's ``//`` floors: a truncating-division era adjustment put
+        # these one day off (or invalid at the TimeClip bound).
+        ("-000001-01-01", "-000001-01-01T00:00:00.000Z"),
+        ("-000100-01-01", "-000100-01-01T00:00:00.000Z"),
+        ("-000400-01-01", "-000400-01-01T00:00:00.000Z"),
+        ("-000401-12-31T23:59:59Z", "-000401-12-31T23:59:59.000Z"),
+        ("-010000-01-01", "-010000-01-01T00:00:00.000Z"),
+        ("0000-01-01T00:00:00Z", "0000-01-01T00:00:00.000Z"),
+        ("-271821-04-20T00:00:00Z", "-271821-04-20T00:00:00.000Z"),
+        # Local times outside years 1..9999: LMT before the first
+        # transition, the final DST rule after 9999.
+        ("-000100-01-01T00:00:00", "-000100-01-01T05:50:36.000Z"),
+        ("+010000-07-01T12:00:00", "+010000-07-01T17:00:00.000Z"),
+        ("+010000-01-15T12:00:00", "+010000-01-15T18:00:00.000Z"),
+    ],
+)
+def test_expanded_years_match_v8(value: str, expected: str) -> None:
+    captured = [e["v8"] for e in MATRIX["dates"] if e.get("input") == value]
+    assert captured == [expected]
+    assert js_date_json(value, TZ) == expected
+
+
 def test_offsetless_date_time_follows_the_zone_passed_in() -> None:
     # Under UTC the ActiGraph form is read as UTC (research live finding).
     assert (

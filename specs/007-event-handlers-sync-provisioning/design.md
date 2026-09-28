@@ -60,7 +60,7 @@ The fixtures under `backend/api/tests/fixtures/` are the source of truth. Each c
 | Fixture | Cases | Captured how |
 |---|---|---|
 | `frame_payload_matrix.json` | 44 request payloads | POST to frame's `fitbitHeartRecord` from inside the network |
-| `frame_actigraph_matrix.json` | 36 HTTP responses, 78 V8 `Date` outputs | POST to frame's ActiGraph route; `node -e` in frame's container, `TZ=America/Chicago` |
+| `frame_actigraph_matrix.json` | 36 HTTP responses, 108 V8 `Date` outputs | POST to frame's ActiGraph route; `node -e` in frame's container, `TZ=America/Chicago` |
 | `frame_participant_joi_matrix.json` | 69 payload verdicts | frame's Joi 17.13.4 run on frame's own schema in frame's container |
 
 Rules the captures established:
@@ -70,7 +70,7 @@ Rules the captures established:
 - **Deep JSON parses.** V8's `JSON.parse` is iterative; `ow_api` falls back to an iterative parser past Python's recursion limit.
 - **Success is 204 with no content type.** ActiGraph success is 204 `text/html`; only the handshake answers 200 with a body.
 - **ValidationCode echo follows Node's `setHeader`.** Latin-1 characters go out as UTF-8 bytes; an array becomes one header line per element; CR, LF, DEL, BEL and anything above U+00FF answer 500.
-- **Dates follow V8.** `start` and `end` reproduce all 78 captured `JSON.stringify(new Date(x))` outputs, including DST ambiguous and gap times.
+- **Dates follow V8.** `start` and `end` reproduce all 108 captured `JSON.stringify(new Date(x))` outputs, including DST ambiguous and gap times, BCE and year-0 dates, and local times outside years 1..9999 (the zone's earliest offset before its first transition, its final rule after 9999).
 
 ## View-based reads
 

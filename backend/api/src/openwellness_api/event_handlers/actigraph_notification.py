@@ -109,6 +109,7 @@ def _wire(text: str) -> str:
 
 _MAX_TIME_MS: Final = 8.64e15  # ECMAScript TimeClip bound
 _MS_PER_DAY: Final = 86_400_000
+_MS_PER_400_YEARS: Final = 146_097 * _MS_PER_DAY
 
 # ES date-time format and the V8 legacy forms captured from frame's node:
 # ``T``/``t`` or one or more spaces between date and time, seconds and
@@ -227,9 +228,18 @@ def _local_offset_ms(wall_ms: int, tz: ZoneInfo) -> int | None:
 
     ``fold=0`` gives V8's choices: the earlier instant for an ambiguous
     (repeated) hour and the pre-transition offset for a time in the gap.
-    Outside Python's year range 1..9999 the offset cannot be computed, so
-    the value is reported as invalid.
+
+    Python's ``datetime`` covers years 1..9999 only. A wall time outside
+    that range is moved by whole 400-year Gregorian cycles (same calendar,
+    same weekdays) into it: a BCE time lands before the zone's first
+    transition (V8 answers with the zone's earliest offset, LMT for
+    Chicago), a time past 9999 in the zone's final recurring rule.
     """
+    year = _civil_from_days(wall_ms // _MS_PER_DAY)[0]
+    if year < 1:
+        wall_ms += -((year - 1) // 400) * _MS_PER_400_YEARS
+    elif year > 9999:
+        wall_ms -= ((year - 9600) // 400) * _MS_PER_400_YEARS
     try:
         naive = datetime(1970, 1, 1) + timedelta(milliseconds=wall_ms)
     except OverflowError:
@@ -243,7 +253,7 @@ def _local_offset_ms(wall_ms: int, tz: ZoneInfo) -> int | None:
 def _days_from_civil(year: int, month: int, day: int) -> int:
     """Days since 1970-01-01 in the proleptic Gregorian calendar (any year)."""
     y = year - (1 if month <= 2 else 0)
-    era = (y if y >= 0 else y - 399) // 400
+    era = y // 400  # Python's // floors, so no negative-year adjustment
     yoe = y - era * 400
     mp = (month + 9) % 12
     doy = (153 * mp + 2) // 5 + day - 1
@@ -253,7 +263,7 @@ def _days_from_civil(year: int, month: int, day: int) -> int:
 
 def _civil_from_days(days: int) -> tuple[int, int, int]:
     z = days + 719468
-    era = (z if z >= 0 else z - 146096) // 146097
+    era = z // 146097  # floors, as above
     doe = z - era * 146097
     yoe = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365
     doy = doe - (365 * yoe + yoe // 4 - yoe // 100)
