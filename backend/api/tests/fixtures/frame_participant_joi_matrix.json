@@ -1,0 +1,1289 @@
+{
+ "_source": "frame api 6706a1e5 (joi 17.13.4): POST /participants payload schema text-extracted from server/api/participants.js and validated in the running frame container with hapi defaults (convert, abortEarly, no unknown keys); captured 2026-09-28 for plan 10-07",
+ "cases": [
+  {
+   "id": "minimal",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "full",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "location": "Chicago",
+    "assignedCoachId": "0123456789abcdef01234568",
+    "participantType": 3,
+    "heightInInches": 65.5,
+    "participantStates": [
+     "a",
+     "b"
+    ],
+    "tz": "America/Chicago",
+    "startWeight": 180.2,
+    "age": 40,
+    "gender": 1,
+    "id": "0123456789abcdef0123456a"
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "location": "Chicago",
+    "assignedCoachId": "0123456789abcdef01234568",
+    "participantType": 3,
+    "heightInInches": 65.5,
+    "participantStates": [
+     "a",
+     "b"
+    ],
+    "tz": "America/Chicago",
+    "startWeight": 180.2,
+    "age": 40,
+    "gender": 1,
+    "id": "0123456789abcdef0123456a"
+   }
+  },
+  {
+   "id": "missing_studyId",
+   "payload": {
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "any.required",
+   "joi_value": null
+  },
+  {
+   "id": "missing_username",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "any.required",
+   "joi_value": null
+  },
+  {
+   "id": "missing_password",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "any.required",
+   "joi_value": null
+  },
+  {
+   "id": "missing_email",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "any.required",
+   "joi_value": null
+  },
+  {
+   "id": "missing_participantNumber",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com"
+   },
+   "joi_ok": false,
+   "joi_error": "any.required",
+   "joi_value": null
+  },
+  {
+   "id": "studyId_23",
+   "payload": {
+    "studyId": "0123456789abcdef0123456",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.min",
+   "joi_value": null
+  },
+  {
+   "id": "studyId_25",
+   "payload": {
+    "studyId": "0123456789abcdef012345678",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.max",
+   "joi_value": null
+  },
+  {
+   "id": "studyId_non_hex_24",
+   "payload": {
+    "studyId": "zzzzzzzzzzzzzzzzzzzzzzzz",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "zzzzzzzzzzzzzzzzzzzzzzzz",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "studyId_number",
+   "payload": {
+    "studyId": 123,
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.base",
+   "joi_value": null
+  },
+  {
+   "id": "studyId_null",
+   "payload": {
+    "studyId": null,
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.base",
+   "joi_value": null
+  },
+  {
+   "id": "id_23",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "id": "0123456789abcdef0123456"
+   },
+   "joi_ok": false,
+   "joi_error": "string.min",
+   "joi_value": null
+  },
+  {
+   "id": "id_empty",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "id": ""
+   },
+   "joi_ok": false,
+   "joi_error": "string.empty",
+   "joi_value": null
+  },
+  {
+   "id": "id_null",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "id": null
+   },
+   "joi_ok": false,
+   "joi_error": "string.base",
+   "joi_value": null
+  },
+  {
+   "id": "username_dash",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice-1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.token",
+   "joi_value": null
+  },
+  {
+   "id": "username_space",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice 1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.token",
+   "joi_value": null
+  },
+  {
+   "id": "username_unicode",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alicé",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.token",
+   "joi_value": null
+  },
+  {
+   "id": "username_empty",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.empty",
+   "joi_value": null
+  },
+  {
+   "id": "username_upper",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "ALICE",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "password_empty",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.empty",
+   "joi_value": null
+  },
+  {
+   "id": "password_number",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": 1234,
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.base",
+   "joi_value": null
+  },
+  {
+   "id": "email_bad",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "not-an-email",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.email",
+   "joi_value": null
+  },
+  {
+   "id": "email_no_tld",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "a@b",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.email",
+   "joi_value": null
+  },
+  {
+   "id": "email_upper",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "BOB@EXAMPLE.ORG",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "bob@example.org",
+    "participantNumber": " P-001 ",
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "email_bogus_tld",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "a@example.invalidtld",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": false,
+   "joi_error": "string.email",
+   "joi_value": null
+  },
+  {
+   "id": "email_plus",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "a+tag@sub.example.co",
+    "participantNumber": " P-001 "
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "a+tag@sub.example.co",
+    "participantNumber": " P-001 ",
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "gender_2",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "gender": 2
+   },
+   "joi_ok": false,
+   "joi_error": "any.only",
+   "joi_value": null
+  },
+  {
+   "id": "gender_0",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "gender": 0
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "gender": 0,
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "gender_str_1",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "gender": "1"
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "gender": 1,
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "gender_1_5",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "gender": 1.5
+   },
+   "joi_ok": false,
+   "joi_error": "any.only",
+   "joi_value": null
+  },
+  {
+   "id": "gender_null",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "gender": null
+   },
+   "joi_ok": false,
+   "joi_error": "any.only",
+   "joi_value": null
+  },
+  {
+   "id": "gender_true",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "gender": true
+   },
+   "joi_ok": false,
+   "joi_error": "any.only",
+   "joi_value": null
+  },
+  {
+   "id": "states_non_string",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantStates": [
+     "a",
+     1
+    ]
+   },
+   "joi_ok": false,
+   "joi_error": "string.base",
+   "joi_value": null
+  },
+  {
+   "id": "states_empty_string_item",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantStates": [
+     ""
+    ]
+   },
+   "joi_ok": false,
+   "joi_error": "string.empty",
+   "joi_value": null
+  },
+  {
+   "id": "states_string",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantStates": "a"
+   },
+   "joi_ok": false,
+   "joi_error": "array.base",
+   "joi_value": null
+  },
+  {
+   "id": "states_null",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantStates": null
+   },
+   "joi_ok": false,
+   "joi_error": "array.base",
+   "joi_value": null
+  },
+  {
+   "id": "location_empty",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "location": ""
+   },
+   "joi_ok": false,
+   "joi_error": "string.empty",
+   "joi_value": null
+  },
+  {
+   "id": "location_null",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "location": null
+   },
+   "joi_ok": false,
+   "joi_error": "string.base",
+   "joi_value": null
+  },
+  {
+   "id": "tz_null",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "tz": null
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "tz": null,
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "tz_empty",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "tz": ""
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "tz": "",
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "tz_number",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "tz": 5
+   },
+   "joi_ok": false,
+   "joi_error": "string.base",
+   "joi_value": null
+  },
+  {
+   "id": "pnum_empty",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": ""
+   },
+   "joi_ok": false,
+   "joi_error": "string.empty",
+   "joi_value": null
+  },
+  {
+   "id": "pnum_spaces",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": "   "
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": "   ",
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "pnum_number",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": 7
+   },
+   "joi_ok": false,
+   "joi_error": "string.base",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "2"
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "participantType": 2,
+    "location": "",
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "ptype_str_spaces",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": " 2 "
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "participantType": 2,
+    "location": "",
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "ptype_str_float",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "2.50"
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "participantType": 2.5,
+    "location": "",
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "ptype_str_exp",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "1e2"
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "participantType": 100,
+    "location": "",
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "ptype_str_bad",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "two"
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_null",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": null
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_bool",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": true
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_unsafe",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": 9007199254740993
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_unsafe",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "9007199254740993"
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "height_str",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "heightInInches": "70"
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "heightInInches": 70,
+    "location": "",
+    "participantType": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "startWeight_null",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "startWeight": null
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "startWeight_str",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "startWeight": "180.5"
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "startWeight": 180.5,
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "age_null",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "age": null
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "age": null,
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "age_str",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "age": "40"
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "age": 40,
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "coach_empty",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "assignedCoachId": ""
+   },
+   "joi_ok": false,
+   "joi_error": "string.empty",
+   "joi_value": null
+  },
+  {
+   "id": "coach_null",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "assignedCoachId": null
+   },
+   "joi_ok": false,
+   "joi_error": "string.base",
+   "joi_value": null
+  },
+  {
+   "id": "coach_not_hex",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "assignedCoachId": "coach"
+   },
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "assignedCoachId": "coach",
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "unknown_key",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "extra": 1
+   },
+   "joi_ok": false,
+   "joi_error": "object.unknown",
+   "joi_value": null
+  },
+  {
+   "id": "payload_null",
+   "payload": null,
+   "joi_ok": false,
+   "joi_error": "object.base",
+   "joi_value": null
+  },
+  {
+   "id": "payload_array",
+   "payload": [
+    {
+     "studyId": "0123456789abcdef01234567",
+     "username": "Alice_1",
+     "password": "pw",
+     "email": "Alice@Example.com",
+     "participantNumber": " P-001 "
+    }
+   ],
+   "joi_ok": false,
+   "joi_error": "object.base",
+   "joi_value": null
+  },
+  {
+   "id": "payload_json_string",
+   "payload": "{\"studyId\": \"0123456789abcdef01234567\", \"username\": \"Alice_1\", \"password\": \"pw\", \"email\": \"Alice@Example.com\", \"participantNumber\": \" P-001 \"}",
+   "joi_ok": false,
+   "joi_error": "object.base",
+   "joi_value": null
+  },
+  {
+   "id": "payload_json_string_ws",
+   "payload": "  {\"studyId\": \"0123456789abcdef01234567\", \"username\": \"Alice_1\", \"password\": \"pw\", \"email\": \"Alice@Example.com\", \"participantNumber\": \" P-001 \"}",
+   "joi_ok": false,
+   "joi_error": "object.base",
+   "joi_value": null
+  },
+  {
+   "id": "payload_plain_string",
+   "payload": "hello",
+   "joi_ok": false,
+   "joi_error": "object.base",
+   "joi_value": null
+  },
+  {
+   "id": "payload_number",
+   "payload": 5,
+   "joi_ok": false,
+   "joi_error": "object.base",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_overflow",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "1e309"
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_neg_overflow",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "-1e309"
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_nan",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "NaN"
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_infinity",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "Infinity"
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_str_neg_infinity",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "participantType": "-Infinity"
+   },
+   "joi_ok": false,
+   "joi_error": "number.base",
+   "joi_value": null
+  },
+  {
+   "id": "height_str_overflow_ws",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "heightInInches": " 1e309 "
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "age_str_overflow",
+   "payload": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "Alice_1",
+    "password": "pw",
+    "email": "Alice@Example.com",
+    "participantNumber": " P-001 ",
+    "age": "1e309"
+   },
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  }
+ ],
+ "body_cases": [
+  {
+   "id": "ptype_json_overflow",
+   "body": "{\"studyId\":\"0123456789abcdef01234567\",\"username\":\"Alice_1\",\"password\":\"pw\",\"email\":\"Alice@Example.com\",\"participantNumber\":\" P-001 \",\"participantType\":1e400}",
+   "joi_ok": false,
+   "joi_error": "number.infinity",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_json_big_int",
+   "body": "{\"studyId\":\"0123456789abcdef01234567\",\"username\":\"Alice_1\",\"password\":\"pw\",\"email\":\"Alice@Example.com\",\"participantNumber\":\" P-001 \",\"participantType\":9007199254740993}",
+   "joi_ok": false,
+   "joi_error": "number.unsafe",
+   "joi_value": null
+  },
+  {
+   "id": "ptype_json_float_integral",
+   "body": "{\"studyId\":\"0123456789abcdef01234567\",\"username\":\"Alice_1\",\"password\":\"pw\",\"email\":\"Alice@Example.com\",\"participantNumber\":\" P-001 \",\"participantType\":2.0}",
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "participantType": 2,
+    "location": "",
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  },
+  {
+   "id": "gender_json_float_integral",
+   "body": "{\"studyId\":\"0123456789abcdef01234567\",\"username\":\"Alice_1\",\"password\":\"pw\",\"email\":\"Alice@Example.com\",\"participantNumber\":\" P-001 \",\"gender\":1.0}",
+   "joi_ok": true,
+   "joi_error": null,
+   "joi_value": {
+    "studyId": "0123456789abcdef01234567",
+    "username": "alice_1",
+    "password": "pw",
+    "email": "alice@example.com",
+    "participantNumber": " P-001 ",
+    "gender": 1,
+    "location": "",
+    "participantType": 0,
+    "heightInInches": 0,
+    "participantStates": []
+   }
+  }
+ ]
+}

@@ -34,6 +34,9 @@ from openwellness_core.application.repositories import (
     UserRepository,
     WeightRepository,
 )
+from openwellness_core.application.repositories.sync_user_repository import (
+    SyncUserRepository,
+)
 from openwellness_core.domain.exceptions.domain_exception import (
     EntityNotFoundException,
 )
@@ -278,6 +281,185 @@ from openwellness_api.resources import RESOURCE_MODULES
 _WIRED_MODULES = [mod.__name__ for mod in RESOURCE_MODULES]
 
 
+class FakeEventSettings:
+    """``ComponentSettingsReader`` fake keyed like frame's view query."""
+
+    def __init__(self) -> None:
+        self.rows: dict[tuple[Any, int], dict[str, Any]] = {}
+        self.calls: list[tuple[Any, int]] = []
+
+    def first(self, study_id: object, component_type: int) -> dict[str, Any] | None:
+        self.calls.append((study_id, component_type))
+        return self.rows.get((study_id, component_type))
+
+
+class FakeEventStudies:
+    """``StudyReader`` fake (frame's ``Study.findById``)."""
+
+    def __init__(self) -> None:
+        self.docs: dict[Any, dict[str, Any]] = {}
+        self.calls: list[object] = []
+
+    def find_by_id(self, study_id: object) -> dict[str, Any] | None:
+        self.calls.append(study_id)
+        return self.docs.get(study_id)
+
+
+class RecordingEventPublisher:
+    """``TaskPublisher`` fake that records ``(task_name, args)``."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[Any]]] = []
+
+    def publish(self, task_name: str, args: list[Any]) -> None:
+        self.calls.append((task_name, args))
+
+
+@pytest.fixture
+def event_fakes():
+    """Read-only fakes plus a recording publisher for the event-handler routes.
+
+    The ``app`` fixture installs them as ``app.state.event_handler_deps``; a
+    test seeds ``event_fakes.settings.rows`` / ``event_fakes.studies.docs``
+    and reads ``event_fakes.publisher.calls``.
+    """
+    from openwellness_api.event_handlers.ports import EventHandlerDeps
+
+    return EventHandlerDeps(
+        settings=FakeEventSettings(),
+        studies=FakeEventStudies(),
+        publisher=RecordingEventPublisher(),
+    )
+
+
+class _RecordingCollection:
+    """A mongomock collection that records each write, in call order, into
+    a log shared with the SG fake, and can be told to fail one operation."""
+
+    def __init__(self, name: str, inner: Any, owner: "ParticipantFakes") -> None:
+        self._name = name
+        self._inner = inner
+        self._owner = owner
+
+    def __getattr__(self, attr: str) -> Any:
+        return getattr(self._inner, attr)
+
+    def _record(self, op: str, detail: Any) -> None:
+        self._owner.calls.append((f"{self._name}.{op}", detail))
+        failure = self._owner.fail_on.get((self._name, op))
+        if failure is not None:
+            raise failure
+
+    def insert_one(self, document: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        self._record("insert_one", document.get("_id"))
+        return self._inner.insert_one(document, *args, **kwargs)
+
+    def update_one(self, filter: dict[str, Any], update: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        self._record("update_one", (filter, update))
+        return self._inner.update_one(filter, update, *args, **kwargs)
+
+    def delete_one(self, filter: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        self._record("delete_one", filter)
+        return self._inner.delete_one(filter, *args, **kwargs)
+
+
+class _RecordingDb:
+    def __init__(self, inner: Any, owner: "ParticipantFakes") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    def __getitem__(self, name: str) -> _RecordingCollection:
+        return _RecordingCollection(name, self._inner[name], self._owner)
+
+
+class RecordingSyncUsers(SyncUserRepository[Any]):
+    """``SyncUserRepository`` fake: records provision/delete into the shared
+    call log and keeps the users it holds, like SG would."""
+
+    def __init__(self, owner: "ParticipantFakes") -> None:
+        self._owner = owner
+        self.users: dict[str, dict[str, Any]] = {}
+        self.fail_provision: Exception | None = None
+
+    def provision(self, name: str, password: str, admin_channels: list[str]) -> bool:
+        self._owner.calls.append(("sg.provision", (name, password, list(admin_channels))))
+        if self.fail_provision is not None:
+            raise self.fail_provision
+        created = name not in self.users  # SG: 201 create, 200 update
+        self.users[name] = {"password": password, "admin_channels": list(admin_channels)}
+        return created
+
+    def delete(self, name: str) -> None:
+        self._owner.calls.append(("sg.delete", name))
+        self.users.pop(name, None)
+
+    def get_by_id(self, entity_id: str) -> Any:
+        return self.users.get(entity_id)
+
+    def save(self, user: Any) -> Any:
+        return user
+
+
+class ParticipantFakes:
+    """Deps for ``POST /api/participants``: a mongomock db behind a recording
+    wrapper, a recording SG fake, one shared call log, and seed helpers."""
+
+    def __init__(self) -> None:
+        import mongomock
+
+        self.raw = mongomock.MongoClient()["frame"]
+        self.calls: list[tuple[str, Any]] = []
+        self.fail_on: dict[tuple[str, str], Exception] = {}
+        self.db = _RecordingDb(self.raw, self)
+        self.sync_users = RecordingSyncUsers(self)
+
+    def seed_admin(self, groups: dict[str, str] | None) -> str:
+        """An admin user whose ``admins`` document has ``groups``; returns the
+        users ``_id`` hex (the JWT subject)."""
+        from bson import ObjectId
+
+        admin_id = ObjectId()
+        user_id = ObjectId()
+        self.raw["admins"].insert_one({"_id": admin_id, "groups": groups or {}})
+        self.raw["users"].insert_one(
+            {
+                "_id": user_id,
+                "username": f"admin{user_id}",
+                "email": f"admin{user_id}@example.org",
+                "roles": {"admin": {"id": str(admin_id), "name": "Admin"}},
+            }
+        )
+        return str(user_id)
+
+    def seed_root_admin(self) -> str:
+        return self.seed_admin({"root": "Root"})
+
+    def seed_study(self) -> str:
+        from bson import ObjectId
+
+        study_id = ObjectId()
+        self.raw["studies"].insert_one({"_id": study_id, "name": "Study"})
+        return str(study_id)
+
+    def seed_user(self, username: str, email: str) -> None:
+        self.raw["users"].insert_one({"username": username, "email": email})
+
+    def seed_participant(self, pid: str) -> None:
+        from bson import ObjectId
+
+        self.raw["participants"].insert_one({"_id": ObjectId(pid)})
+
+    def writes(self) -> list[str]:
+        return [name for name, _ in self.calls]
+
+
+@pytest.fixture
+def participant_fakes() -> ParticipantFakes:
+    """Recording fakes for ``POST /api/participants``; the ``app`` fixture
+    installs them as ``app.state.frame_participant_deps``."""
+    return ParticipantFakes()
+
+
 @pytest.fixture
 def fake_email_sender():
     """Function-scoped in-memory OTP email recorder.
@@ -292,7 +474,7 @@ def fake_email_sender():
 
 
 @pytest.fixture
-def app(fakes: dict[type, Any], fake_email_sender):
+def app(fakes: dict[type, Any], fake_email_sender, event_fakes, participant_fakes):
     """App with fakes wired through an ``ApplicationContainer`` instance.
 
     We bypass the real lifespan (no Couchbase/Mongo connection), build a
@@ -300,6 +482,9 @@ def app(fakes: dict[type, Any], fake_email_sender):
     and wire the resource modules so ``@inject`` markers see the overrides. An
     ``AuthContainer`` is also built and attached with real collaborators backed
     by fakeredis/mongomock + a real clock, so the auth router works end-to-end.
+    The event-handler router is included as ``create_app()`` includes it, with
+    ``event_fakes`` as its deps, and so is the frame participants router,
+    with ``participant_fakes`` as its deps.
     """
     import fakeredis
     import mongomock
@@ -311,11 +496,23 @@ def app(fakes: dict[type, Any], fake_email_sender):
     from openwellness_api.container import ApplicationContainer
     from openwellness_api.deps.auth_container import AuthContainer, default_clock
     from openwellness_api.errors.handlers import register_exception_handlers
+    from openwellness_api.event_handlers import build_event_handlers_router
+    from openwellness_api.frame_participants import (
+        FrameParticipantDeps,
+        build_frame_participants_router,
+    )
     from openwellness_api.v1 import build_v1_router
 
     instance = FastAPI(title="OpenWellness API (test)")
     register_exception_handlers(instance)
     instance.include_router(build_v1_router())
+    instance.include_router(build_event_handlers_router())
+    instance.state.event_handler_deps = event_fakes
+    instance.include_router(build_frame_participants_router())
+    instance.state.frame_participant_deps = FrameParticipantDeps(
+        db=participant_fakes.db,
+        sync_users=lambda: participant_fakes.sync_users,
+    )
 
     container = ApplicationContainer()
     for iface, fake in fakes.items():
