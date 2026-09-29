@@ -1,4 +1,4 @@
-"""``POST /api/participants``: frame's participant creation, SG user first.
+"""``POST /api/participants``: frame's participant creation.
 
 Lifecycle, in hapi's order for frame's route (``auth: {strategy: 'simple',
 scope: 'admin'}``, ``validate.payload``, ``pre: [requireAdminGroup('root'),
@@ -14,15 +14,18 @@ usernameCheck, emailCheck, study, pid]``):
 5. ``requireAdminGroup('root')``: the caller's ``admins`` document must have
    ``root`` among its ``groups`` keys, else 403;
 6. username 409, email 409, study 404, supplied id 409;
-7. the Sync Gateway user is provisioned FIRST (D-12), with frame's
-   credentials (D-14); a failure answers 400 and nothing reaches Mongo;
-8. Mongo: insert ``participants``, insert ``users``, ``$set userId``,
-   ``$set roles.participant``. Any failure deletes the inserted documents,
-   then the SG user if this request owns it (see :func:`_owns_sync_user`),
-   and answers 400 ``Participant creation failed.``
-   (deviation D-b: frame echoes the internal error; its concurrent create and
-   broken compensation are not reproduced);
-9. both documents are re-read and returned in frame's shape.
+7. insert ``participants``: the unique ``_id`` is the ownership point. A
+   rival create with the same supplied ``id`` that passed the pre-check
+   loses here and stops before Sync Gateway, so it can neither overwrite
+   nor delete the winner's SG user;
+8. provision the Sync Gateway user (D-12: before the ``users`` document and
+   the links), with frame's credentials (D-14);
+9. insert ``users``, ``$set userId``, ``$set roles.participant``. A failure
+   from step 8 on deletes the inserted documents newest first, then the SG
+   user (this request owns the id), and answers 400 ``Participant creation
+   failed.`` (deviation D-b: frame echoes the internal error; its
+   concurrent create and broken compensation are not reproduced);
+10. both documents are re-read and returned in frame's shape.
 
 Log lines name the step and the exception class only: never a password,
 hash, email, username, or the couchId (which is the SG password under D-14).
@@ -39,7 +42,6 @@ from typing import Annotated, Any, Final
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import Depends, Request
-from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 
@@ -113,45 +115,23 @@ def _fail(step: str, exc: BaseException) -> None:
     logger.error("frame_participants/create failed at %s: %s", step, exc.__class__.__name__)
 
 
-def _owns_sync_user(
-    inserted: list[tuple[str, ObjectId]], sg_created: bool, exc: BaseException
-) -> bool:
-    """Whether a failed create may delete the SG user it provisioned.
-
-    Provisioning is an upsert, so two creates with the same supplied ``id``
-    can both pass the pre-check and provision the same SG user. The unique
-    ``participants`` ``_id`` decides which one owns it:
-
-    - this request inserted the participant: it owns the id, and any rival
-      fails that insert, so the SG user is its to delete;
-    - the participant insert hit a duplicate key: a rival owns the id and
-      its SG user, which must survive;
-    - the participant insert failed otherwise: delete only a user this
-      request created (SG answered 201), never one that already existed.
-    """
-    if inserted:
-        return True
-    return sg_created and not isinstance(exc, DuplicateKeyError)
-
-
 def _compensate(
     db: Any,
     inserted: list[tuple[str, ObjectId]],
     sync_users: SyncUserRepository[Any],
     couch_id: str,
-    delete_sync_user: bool,
 ) -> None:
     """Undo a partial create: inserted Mongo documents (newest first), then
-    the SG user when this request owns it. Each step is attempted even if an
-    earlier one fails."""
+    the SG user. Each step is attempted even if an earlier one fails.
+
+    Only called after this request inserted the participant, so it owns the
+    id and the SG user of that name (deleting a missing user is a no-op).
+    """
     for collection, oid in reversed(inserted):
         try:
             db[collection].delete_one({"_id": oid})
         except Exception as exc:
             _fail(f"compensate-{collection}-delete", exc)
-    if not delete_sync_user:
-        logger.warning("frame_participants/create kept the SG user it does not own")
-        return
     try:
         sync_users.delete(couch_id)
     except Exception as exc:
@@ -236,20 +216,21 @@ def _create(deps: FrameParticipantDeps, payload: Any, principal: Principal) -> R
         step = "sg-config"
         sync_users = deps.sync_users()
 
-        step = "sg-provision"
+        step = "participants-insert"
         try:
-            sg_created = sync_users.provision(
-                couch_id, couch_id, sync_user_channels(couch_id, body["studyId"])
-            )
+            db["participants"].insert_one(participant_doc)
         except Exception as exc:
+            # Nothing of this request exists anywhere. A duplicate _id means
+            # a rival create owns the id and its SG user; neither is touched.
             _fail(step, exc)
             return boom(400, CREATION_FAILED)
+        inserted: list[tuple[str, ObjectId]] = [("participants", pid)]
 
-        inserted: list[tuple[str, ObjectId]] = []
         try:
-            step = "participants-insert"
-            db["participants"].insert_one(participant_doc)
-            inserted.append(("participants", pid))
+            step = "sg-provision"
+            sync_users.provision(
+                couch_id, couch_id, sync_user_channels(couch_id, body["studyId"])
+            )
 
             step = "users-insert"
             db["users"].insert_one(user_doc)
@@ -265,9 +246,7 @@ def _create(deps: FrameParticipantDeps, payload: Any, principal: Principal) -> R
             )
         except Exception as exc:
             _fail(step, exc)
-            _compensate(
-                db, inserted, sync_users, couch_id, _owns_sync_user(inserted, sg_created, exc)
-            )
+            _compensate(db, inserted, sync_users, couch_id)
             return boom(400, CREATION_FAILED)
 
         step = "respond"

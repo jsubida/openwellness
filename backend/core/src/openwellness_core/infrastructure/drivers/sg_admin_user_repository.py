@@ -8,8 +8,9 @@ beyond the application network:
 * ``GET    {admin}/{db}/_user/{name}``  read (404 when missing)
 * ``DELETE {admin}/{db}/_user/{name}``  remove (404 when already gone)
 
-Participant creation (``POST /api/participants``) provisions the sync user
-FIRST and writes Mongo only after it exists (D-12). Credentials keep frame
+Participant creation (``POST /api/participants``) inserts the participant
+(its unique ``_id`` settles a same-id race), then provisions the sync user
+before the rest of the Mongo writes (D-12). Credentials keep frame
 parity (D-14): name = couchId, password = couchId, admin channels
 ``[couchId, "study:<studyId>", "sharedData"]``, so fielded app builds keep
 syncing. Because the password equals the name in that scheme, this module

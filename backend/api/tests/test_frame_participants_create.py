@@ -190,7 +190,7 @@ def test_uncastable_study_id_is_hapi_500_as_frames_find_by_id_throws(client, roo
 # --- the happy path -----------------------------------------------------------
 
 
-def test_valid_request_provisions_sg_first_then_writes_mongo_in_order(client, root, participant_fakes):
+def test_valid_request_inserts_the_participant_then_provisions_sg_then_writes_the_rest(client, root, participant_fakes):
     headers, study = root
     resp = client.post(PATH, json=_body(study), headers=headers)
     assert resp.status_code == 200, resp.text
@@ -200,8 +200,8 @@ def test_valid_request_provisions_sg_first_then_writes_mongo_in_order(client, ro
     pid = body["_id"]
     user_id = body["userId"]
     assert participant_fakes.calls == [
-        ("sg.provision", (pid, pid, [pid, f"study:{study}", "sharedData"])),
         ("participants.insert_one", ObjectId(pid)),
+        ("sg.provision", (pid, pid, [pid, f"study:{study}", "sharedData"])),
         ("users.insert_one", ObjectId(user_id)),
         ("participants.update_one", ({"_id": ObjectId(pid)}, {"$set": {"userId": ObjectId(user_id)}})),
         (
@@ -282,12 +282,21 @@ def test_blocking_create_work_runs_off_the_event_loop(client, root, participant_
 # --- failures and compensation ------------------------------------------------
 
 
-def test_sg_provision_failure_is_400_with_zero_mongo_writes(client, root, participant_fakes):
+def _pid(fakes) -> str:
+    return str(next(detail for name, detail in fakes.calls if name == "participants.insert_one"))
+
+
+def test_sg_provision_failure_is_400_and_removes_the_participant(client, root, participant_fakes):
     headers, study = root
     participant_fakes.sync_users.fail_provision = SyncUserProvisioningError("provision", 500, "boom")
     resp = client.post(PATH, json=_body(study), headers=headers)
     _boom(resp, 400, "Bad Request", "Participant creation failed.")
-    assert participant_fakes.writes() == ["sg.provision"]
+    assert participant_fakes.writes() == [
+        "participants.insert_one",
+        "sg.provision",
+        "participants.delete_one",
+        "sg.delete",
+    ]
     assert participant_fakes.raw["participants"].count_documents({}) == 0
     assert participant_fakes.raw["users"].count_documents({"username": USERNAME.lower()}) == 0
 
@@ -298,10 +307,10 @@ def test_users_insert_failure_deletes_the_participant_then_the_sg_user(client, r
     resp = client.post(PATH, json=_body(study), headers=headers)
     _boom(resp, 400, "Bad Request", "Participant creation failed.")
 
-    pid = participant_fakes.calls[0][1][0]
+    pid = _pid(participant_fakes)
     assert participant_fakes.writes() == [
-        "sg.provision",
         "participants.insert_one",
+        "sg.provision",
         "users.insert_one",
         "participants.delete_one",
         "sg.delete",
@@ -313,43 +322,48 @@ def test_users_insert_failure_deletes_the_participant_then_the_sg_user(client, r
     assert pid not in participant_fakes.sync_users.users
 
 
-# SG provisioning is an upsert (201 create, 200 update). Two creates with the
-# same supplied id can both pass the pre-check; the unique participants _id
-# decides which one owns the SG user, and a loser must not delete it.
+# Two creates with the same supplied id can both pass the pre-check. The
+# unique participants _id decides the race before Sync Gateway is touched:
+# the loser neither overwrites the winner's channels nor deletes its user.
 
 
-@pytest.mark.parametrize("sg_existed", [False, True], ids=["sg-201", "sg-200"])
-def test_duplicate_participant_insert_never_deletes_the_rivals_sg_user(
-    client, root, participant_fakes, sg_existed
+def test_race_loser_with_another_study_never_touches_the_winners_sg_user(
+    client, root, participant_fakes, monkeypatch
 ):
-    headers, study = root
+    from openwellness_api.frame_participants import create as create_module
+
+    headers, study_b = root
+    study_a = participant_fakes.seed_study()
     pid = str(ObjectId())
-    if sg_existed:  # a rival provisioned first: this request's PUT answers 200
-        participant_fakes.sync_users.users[pid] = {"password": pid, "admin_channels": [pid]}
-    participant_fakes.fail_on[("participants", "insert_one")] = DuplicateKeyError(
-        "E11000 duplicate key error collection: participants index: _id_"
-    )
-    resp = client.post(PATH, json=_body(study, id=pid), headers=headers)
+    winner_channels = [pid, f"study:{study_a}", "sharedData"]
+    build = create_module.build_participant_doc
+
+    def rival_wins_between_check_and_insert(*args: Any, **kwargs: Any) -> Any:
+        # After this request's pre-check, the rival (study A) inserts the
+        # participant and provisions its SG user.
+        participant_fakes.raw["participants"].insert_one({"_id": ObjectId(pid)})
+        participant_fakes.sync_users.users[pid] = {"password": pid, "admin_channels": winner_channels}
+        return build(*args, **kwargs)
+
+    monkeypatch.setattr(create_module, "build_participant_doc", rival_wins_between_check_and_insert)
+    resp = client.post(PATH, json=_body(study_b, id=pid), headers=headers)
+
     _boom(resp, 400, "Bad Request", "Participant creation failed.")
-    assert participant_fakes.writes() == ["sg.provision", "participants.insert_one"]
-    assert pid in participant_fakes.sync_users.users
+    assert participant_fakes.writes() == ["participants.insert_one"]
+    assert participant_fakes.sync_users.users[pid]["admin_channels"] == winner_channels
+    assert participant_fakes.raw["participants"].count_documents({"_id": ObjectId(pid)}) == 1
+    assert participant_fakes.raw["users"].count_documents({"username": USERNAME.lower()}) == 0
 
 
-@pytest.mark.parametrize(
-    ("sg_existed", "deleted"), [(False, True), (True, False)], ids=["sg-201", "sg-200"]
-)
-def test_other_participant_insert_failure_deletes_only_an_sg_user_it_created(
-    client, root, participant_fakes, sg_existed, deleted
-):
+def test_any_participant_insert_failure_stops_before_sync_gateway(client, root, participant_fakes):
     headers, study = root
     pid = str(ObjectId())
-    if sg_existed:
-        participant_fakes.sync_users.users[pid] = {"password": pid, "admin_channels": [pid]}
+    participant_fakes.sync_users.users[pid] = {"password": pid, "admin_channels": [pid]}
     participant_fakes.fail_on[("participants", "insert_one")] = RuntimeError("write failed")
     resp = client.post(PATH, json=_body(study, id=pid), headers=headers)
     _boom(resp, 400, "Bad Request", "Participant creation failed.")
-    assert ("sg.delete" in participant_fakes.writes()) is deleted
-    assert (pid in participant_fakes.sync_users.users) is not deleted
+    assert participant_fakes.writes() == ["participants.insert_one"]
+    assert participant_fakes.sync_users.users[pid] == {"password": pid, "admin_channels": [pid]}
 
 
 def test_after_its_participant_insert_the_request_owns_even_an_updated_sg_user(
@@ -371,7 +385,7 @@ def test_link_failure_deletes_both_documents_then_the_sg_user(client, root, part
     participant_fakes.fail_on[failing] = RuntimeError("write failed")
     resp = client.post(PATH, json=_body(study), headers=headers)
     _boom(resp, 400, "Bad Request", "Participant creation failed.")
-    pid = participant_fakes.calls[0][1][0]
+    pid = _pid(participant_fakes)
     assert participant_fakes.writes()[-3:] == ["users.delete_one", "participants.delete_one", "sg.delete"]
     assert participant_fakes.raw["participants"].count_documents({"_id": ObjectId(pid)}) == 0
     assert participant_fakes.raw["users"].count_documents({"username": USERNAME.lower()}) == 0
