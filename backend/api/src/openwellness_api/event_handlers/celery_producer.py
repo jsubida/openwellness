@@ -29,6 +29,7 @@ Design points:
 
 from __future__ import annotations
 
+import math
 import threading
 from typing import Any
 
@@ -76,6 +77,55 @@ def build_producer_app(broker_url: str) -> Celery:
     return app
 
 
+def _is_non_finite(value: Any) -> bool:
+    return isinstance(value, float) and not math.isfinite(value)
+
+
+def js_json_args(args: list[Any]) -> list[Any]:
+    """Task arguments as ``JSON.stringify`` would write them.
+
+    node-celery serializes frame's arguments with ``JSON.stringify``, which
+    writes ``NaN`` and ``Infinity`` as ``null``; Kombu's JSON encoder writes
+    ``Infinity``, which the worker reads back as a float. The payload parser
+    yields ``inf`` for an overflowing literal such as ``1e400``, so every
+    non-finite float, at any depth, becomes ``None`` here.
+
+    Iterative, because a payload may nest far past Python's recursion limit.
+    Arguments without a non-finite float are returned unchanged.
+    """
+    pending: list[Any] = [args]
+    found = False
+    while pending and not found:
+        node = pending.pop()
+        if isinstance(node, dict):
+            pending.extend(node.values())
+        elif isinstance(node, list):
+            pending.extend(node)
+        else:
+            found = _is_non_finite(node)
+    if not found:
+        return args
+
+    root: list[Any] = []
+    # Each entry: (source container, the copy being filled).
+    stack: list[tuple[Any, Any]] = [(args, root)]
+    while stack:
+        source, target = stack.pop()
+        items = source.items() if isinstance(source, dict) else enumerate(source)
+        for key, value in items:
+            if isinstance(value, (dict, list)):
+                copy: Any = {} if isinstance(value, dict) else []
+                stack.append((value, copy))
+                value = copy
+            elif _is_non_finite(value):
+                value = None
+            if isinstance(target, dict):
+                target[key] = value
+            else:
+                target.append(value)
+    return root
+
+
 class CeleryTaskPublisher:
     """``TaskPublisher`` onto the ``celery`` queue ``router`` consumes.
 
@@ -106,6 +156,6 @@ class CeleryTaskPublisher:
         if not self._broker_url:
             raise TaskPublishError("CELERY_BROKER_URL is not set")
         try:
-            self.app.send_task(task_name, args=list(args), queue=ROUTER_QUEUE)
+            self.app.send_task(task_name, args=js_json_args(list(args)), queue=ROUTER_QUEUE)
         except Exception as exc:
             raise TaskPublishError(type(exc).__name__) from exc

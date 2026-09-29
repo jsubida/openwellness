@@ -202,3 +202,41 @@ def test_concurrent_publishes_succeed_and_build_the_app_once(
     assert builds == ["built"]
     owners = sorted(message.decode()[0][0] for message in _drain(publisher))
     assert owners == ["o0", "o1"]
+
+
+def test_non_finite_floats_go_on_the_wire_as_null_like_json_stringify() -> None:
+    """``{"studyId":"s1","owner":1e400}``: the parser yields ``inf`` (as
+    JSON.parse yields Infinity), and frame's node-celery JSON.stringify
+    publishes it as null. The raw message body must carry null too."""
+    from openwellness_api.event_handlers.hapi import parse_hapi_payload
+
+    payload = parse_hapi_payload(
+        "application/json", b'{"studyId":"s1","owner":1e400}'
+    ).payload
+    assert payload["owner"] == float("inf")
+    publisher = _publisher("memory://")
+
+    publisher.publish(
+        "jobs.fitbit.heart",
+        [payload["owner"], {"k": [float("-inf"), float("nan"), 1.5, 2]}],
+    )
+
+    (message,) = _drain(publisher)
+    body = message.body if isinstance(message.body, bytes) else message.body.encode()
+    assert body.startswith(b'[[null, {"k": [null, null, 1.5, 2]}], {}, ')
+    assert b"Infinity" not in body and b"NaN" not in body
+
+
+def test_js_json_args_leaves_finite_args_untouched_and_handles_deep_nesting() -> None:
+    from openwellness_api.event_handlers.celery_producer import js_json_args
+
+    finite = ["o1", {"a": [1, 2.5, None]}]
+    assert js_json_args(finite) is finite
+
+    deep: Any = float("inf")
+    for _ in range(5000):
+        deep = [deep]
+    out = js_json_args([deep])
+    for _ in range(5001):
+        out = out[0]
+    assert out is None
