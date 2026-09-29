@@ -319,3 +319,51 @@ def test_published_owner_is_rounded_like_frame(client: TestClient, event_fakes: 
     assert event_fakes.publisher.calls == [("jobs.fitbit.heart", [9007199254740992])]
     (_, args), = event_fakes.publisher.calls
     assert json.dumps(args) == "[9007199254740992]"
+
+
+# --------------------------------------------------------------------------- #
+# Streaming read bound
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("chunk_sizes", [[4 * 1024 * 1024], [10, 4 * 1024 * 1024, 10]])
+def test_one_huge_chunk_is_never_buffered_past_the_limit(
+    monkeypatch: pytest.MonkeyPatch, chunk_sizes: list[int]
+) -> None:
+    """A chunked body (no content-length) arriving as one oversized ASGI
+    chunk: at most MAX_BYTES + 1 bytes are kept, and the answer is the 413."""
+    import asyncio
+
+    from starlette.requests import Request
+
+    from openwellness_api.event_handlers import hapi
+
+    messages = [
+        {"type": "http.request", "body": b"x" * n, "more_body": i < len(chunk_sizes) - 1}
+        for i, n in enumerate(chunk_sizes)
+    ]
+
+    async def receive() -> dict[str, Any]:
+        return messages.pop(0)
+
+    seen: list[int] = []
+    parse = hapi.parse_hapi_payload
+
+    def recording_parse(content_type: str | None, raw: bytes) -> Any:
+        seen.append(len(raw))
+        return parse(content_type, raw)
+
+    monkeypatch.setattr(hapi, "parse_hapi_payload", recording_parse)
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": PATH,
+        "headers": [(b"content-type", b"application/json")],
+    }
+
+    result = asyncio.run(hapi.read_hapi_payload(Request(scope, receive)))
+
+    assert seen == [hapi.MAX_BYTES + 1]
+    assert result.response is not None
+    assert result.response.status_code == 413
+    assert bytes(result.response.body) == hapi.too_large().body

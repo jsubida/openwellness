@@ -430,8 +430,11 @@ async def read_hapi_payload(request: Request) -> PayloadResult:
     chunks: list[bytes] = []
     size = 0
     async for chunk in request.stream():
-        chunks.append(chunk)
-        size += len(chunk)
+        # ASGI does not bound a chunk: keep only what can still count, so
+        # the buffer never exceeds MAX_BYTES + 1 however large one chunk is.
+        kept = chunk[: MAX_BYTES + 1 - size]
+        chunks.append(kept)
+        size += len(kept)
         if size > MAX_BYTES:
             break
     return parse_hapi_payload(request.headers.get("content-type"), b"".join(chunks))
