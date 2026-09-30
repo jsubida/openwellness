@@ -28,6 +28,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Final
 
+from bson.errors import InvalidId
 from fastapi import Depends, Query, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -137,15 +138,25 @@ def _participant(deps: GoogleHealthDeps, participant_id: str) -> dict[str, Any] 
 
     ``fitbits.participantId`` is the hex ``_id`` of the ``participants``
     document (contract "fitbits Google record"; frame wraps the same id in
-    ``ObjectID``), so the lookup is by ``_id``.
+    ``ObjectID``), so the lookup is by ``_id``. A malformed id is "unknown";
+    a Mongo failure propagates.
     """
     try:
         doc = deps.participants.find_by_id(participant_id)
-    except Exception:
+    except (InvalidId, TypeError):
         return None
     if doc is None or doc.get("isActive") is False:
         return None
     return doc
+
+
+def _held(deps: GoogleHealthDeps, participant: dict[str, Any]) -> bool:
+    """Whether the participant's study is on the migration hold (contract "Migration hold")."""
+    held = deps.settings.held_study_ids()
+    if held == "*":
+        return True
+    study_id = participant.get("studyId")
+    return bool(held) and study_id is not None and str(study_id).lower() in held
 
 
 # --- POST /api/googleHealth/links ---------------------------------------------
@@ -175,6 +186,9 @@ def _mint_link(deps: GoogleHealthDeps, participant_id: str) -> Response:
         participant = _participant(deps, participant_id)
         if participant is None:
             return boom(404, "Participant not found.")
+        if _held(deps, participant):
+            logger.warning("googleHealth/links held")
+            return boom(409, "The participant's study is on hold for Google Health migration.")
         token, exp = deps.tokens.mint_link(participant_id)
     except Exception as exc:
         logger.error("googleHealth/links failed: %s", type(exc).__name__)
@@ -194,6 +208,13 @@ def authorize(request: Request, t: Annotated[str | None, Query()] = None) -> Res
         link = deps.tokens.verify_link(t)
         if deps.tokens.is_link_claimed(link.jti):
             logger.warning("googleHealth/authorize refused: link already used")
+            return _error()
+        participant = _participant(deps, link.participant_id)
+        if participant is None:
+            logger.warning("googleHealth/authorize refused: participant not active")
+            return _error()
+        if _held(deps, participant):
+            logger.warning("googleHealth/authorize held")
             return _error()
         cookie = _new_cookie()
         state = deps.tokens.mint_state(
@@ -265,7 +286,27 @@ def finish_auth(
         return _error()
 
     pid = claims.participant_id
-    if not deps.tokens.claim_link(claims.link_jti, claims.link_exp):
+    link_jti = claims.link_jti
+    try:
+        participant = _participant(deps, pid)
+    except Exception as exc:
+        logger.error("googleHealth/finishAuth participant read failed: %s", type(exc).__name__)
+        return _error(500)
+    if participant is None:
+        logger.warning("googleHealth/finishAuth refused: participant not active")
+        return _error()
+    if _held(deps, participant):
+        logger.warning("googleHealth/finishAuth held")
+        return _error()
+
+    # I3: the link is claimed before the code is exchanged, so a second state
+    # minted from the same link can never exchange a code.
+    try:
+        claimed = deps.tokens.claim_link(link_jti, claims.link_exp)
+    except GoogleHealthTokenError as exc:
+        logger.error("googleHealth/finishAuth link claim failed: %s", type(exc).__name__)
+        return _error(500)
+    if not claimed:
         logger.warning("googleHealth/finishAuth refused: link already used")
         return _error()
 
@@ -273,7 +314,7 @@ def finish_auth(
         grant = deps.google.exchange_code(code)
     except GoogleOAuthError as exc:
         logger.warning("googleHealth/finishAuth google failed: %s", exc.kind)
-        deps.tokens.release_link(claims.link_jti)
+        deps.tokens.release_link(link_jti)
         return _error()
 
     missing_scope = set(deps.settings.scopes) - set(grant.scope.split())
@@ -283,35 +324,65 @@ def finish_auth(
         # with every permission.
         logger.warning("googleHealth/finishAuth rejected grant: incomplete")
         _revoke_rejected_grant(deps, grant)
-        deps.tokens.release_link(claims.link_jti)
+        deps.tokens.release_link(link_jti)
         return _error()
 
     try:
         identity = deps.google.get_identity(grant.access_token)
     except GoogleOAuthError as exc:
         logger.warning("googleHealth/finishAuth google failed: %s", exc.kind)
-        deps.tokens.release_link(claims.link_jti)
+        deps.tokens.release_link(link_jti)
         return _error()
 
-    now = int(deps.clock())
-    legacy_owners = deps.store.legacy_owner_ids(pid)
-    migrated_at = deps.store.carried_migrated_at(pid) or now
-    google_id = deps.store.insert_google_record(
-        {
-            "participantId": pid,
-            "provider": PROVIDER_GOOGLE_HEALTH,
-            "accessToken": grant.access_token,
-            "refreshToken": grant.refresh_token,
-            "expiresAt": now + grant.expires_in,
-            "scope": grant.scope,
-            "healthUserId": identity.health_user_id,
-            "legacyUserId": identity.legacy_user_id,
-            "timeCreated": now,
-            "migratedAt": migrated_at,
-            "migrationStatus": "pending",
-        }
-    )
-    superseded = deps.store.supersede_active(pid, google_id, now)
+    locks = deps.tokens.acquire_locks(pid, identity.health_user_id)
+    if locks is None:
+        logger.warning("googleHealth/finishAuth busy")
+        deps.tokens.release_link(link_jti)
+        return _busy()
+
+    superseded: list[str] = []
+    try:
+        try:
+            # I2: under the account lock, no other participant may hold this
+            # Google account. The grant is not revoked: the other
+            # participant's active record shares it.
+            owner = deps.store.active_google_owner_of(identity.health_user_id)
+            if owner is not None and owner != pid:
+                logger.warning("googleHealth/finishAuth refused: account connected elsewhere")
+                deps.tokens.release_link(link_jti)
+                return _error()
+            legacy_owners = deps.store.legacy_owner_ids(pid)
+            now = int(deps.clock())
+            migrated_at = deps.store.carried_migrated_at(pid) or now
+            google_id = deps.store.insert_google_record(
+                {
+                    "participantId": pid,
+                    "provider": PROVIDER_GOOGLE_HEALTH,
+                    "accessToken": grant.access_token,
+                    "refreshToken": grant.refresh_token,
+                    "expiresAt": now + grant.expires_in,
+                    "scope": grant.scope,
+                    "healthUserId": identity.health_user_id,
+                    "legacyUserId": identity.legacy_user_id,
+                    "timeCreated": now,
+                    "migratedAt": migrated_at,
+                    "migrationStatus": "pending",
+                }
+            )
+        except Exception as exc:
+            # Nothing was written: the link can be retried.
+            logger.error("googleHealth/finishAuth store failed: %s", type(exc).__name__)
+            deps.tokens.release_link(link_jti)
+            return _error(500)
+
+        # From here the record exists and stays ``pending`` until the
+        # scheduler's completeMigration runs (I5); the link stays consumed.
+        try:
+            superseded = deps.store.supersede_active(pid, google_id, now)
+        except Exception as exc:
+            logger.error("googleHealth/finishAuth supersede failed: %s", type(exc).__name__)
+    finally:
+        deps.tokens.release_locks(locks)
 
     if legacy_owners and identity.legacy_user_id not in legacy_owners:
         # T-10.1-15: possibly the wrong Google account for this participant.

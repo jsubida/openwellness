@@ -22,11 +22,12 @@ token, a claim or the underlying library's message.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import secrets
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Final
 
 import jwt
@@ -40,6 +41,8 @@ _ALGORITHM: Final = "HS256"
 
 STATE_KEY: Final = "gh:state:{jti}"
 LINK_CLAIM_KEY: Final = "gh:link:claim:{jti}"
+PID_LOCK_KEY: Final = "gh:lock:pid:{participant_id}"
+HU_LOCK_KEY: Final = "gh:lock:hu:{digest}"
 
 
 class GoogleHealthTokenError(Exception):
@@ -80,6 +83,20 @@ class StateClaims:
     jti: str
     link_jti: str
     link_exp: int
+
+
+@dataclass(frozen=True)
+class MigrationLocks:
+    """The participant and account locks one finishAuth holds (I3)."""
+
+    keys: tuple[str, ...]
+    token: str = field(repr=False)
+
+
+def account_lock_key(health_user_id: str) -> str:
+    """``gh:lock:hu:<first 32 hex of sha256(healthUserId)>``: never the raw id."""
+    digest = hashlib.sha256(health_user_id.encode("utf-8")).hexdigest()[:32]
+    return HU_LOCK_KEY.format(digest=digest)
 
 
 class GoogleHealthTokens:
@@ -196,6 +213,54 @@ class GoogleHealthTokens:
             return bool(self._redis.exists(LINK_CLAIM_KEY.format(jti=jti)))
         except Exception as exc:
             raise TokenStoreError() from exc
+
+    # --- migration locks (I3) --------------------------------------------
+
+    def acquire_locks(self, participant_id: str, health_user_id: str) -> MigrationLocks | None:
+        """Take ``gh:lock:pid:<P>`` then ``gh:lock:hu:<hash>``, each ``SET NX PX``.
+
+        ``None`` when either is held elsewhere or Redis fails; a participant
+        lock taken before a refused account lock is given back.
+        """
+        token = secrets.token_urlsafe(16)
+        ttl_ms = self._settings.lock_ttl_ms
+        pid_key = PID_LOCK_KEY.format(participant_id=participant_id)
+        hu_key = account_lock_key(health_user_id)
+        try:
+            if not self._redis.set(pid_key, token, nx=True, px=ttl_ms):
+                return None
+        except Exception:
+            return None
+        try:
+            taken = bool(self._redis.set(hu_key, token, nx=True, px=ttl_ms))
+        except Exception:
+            taken = False
+        if not taken:
+            self._release_owned(pid_key, token)
+            return None
+        return MigrationLocks(keys=(pid_key, hu_key), token=token)
+
+    def release_locks(self, locks: MigrationLocks) -> None:
+        """Delete each lock key only while it still holds this request's token."""
+        for key in locks.keys:
+            self._release_owned(key, locks.token)
+
+    def _release_owned(self, key: str, token: str) -> None:
+        """Compare-and-delete under ``WATCH``; a lock that expired and was
+        re-taken by another request is left alone. Best effort: an
+        unreleased lock expires after ``lock_ttl_ms``."""
+        try:
+            with self._redis.pipeline() as pipe:
+                pipe.watch(key)
+                current = pipe.get(key)
+                if current in (token, token.encode("ascii")):
+                    pipe.multi()
+                    pipe.delete(key)
+                    pipe.execute()
+                else:
+                    pipe.unwatch()
+        except Exception:
+            pass
 
     # --- helpers ----------------------------------------------------------
 
