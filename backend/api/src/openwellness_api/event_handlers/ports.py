@@ -71,8 +71,13 @@ class DeviceReader(Protocol):
 class TaskPublisher(Protocol):
     """Hands one task, by name, to the broker frame's workers consume."""
 
-    def publish(self, task_name: str, args: list[Any]) -> None:
-        """Publish ``task_name(*args)``. Raises :class:`TaskPublishError`."""
+    def publish(self, task_name: str, args: list[Any], queue: str = "celery") -> None:
+        """Publish ``task_name(*args)`` onto ``queue``.
+
+        The default is the ``celery`` list ``router`` consumes, so every
+        Phase 10 handler is unchanged; Google Health tasks name
+        ``scheduler_new`` directly (D-06). Raises :class:`TaskPublishError`.
+        """
         ...
 
 

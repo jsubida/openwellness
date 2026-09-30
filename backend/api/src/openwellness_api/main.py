@@ -28,6 +28,7 @@ from .errors.handlers import register_exception_handlers
 from .event_handlers import build_event_handler_deps, build_event_handlers_router
 from .event_handlers.celery_producer import ProducerSettings
 from .frame_participants import build_frame_participant_deps, build_frame_participants_router
+from .google_health import build_google_health_deps, build_google_health_router
 from .resources import RESOURCE_MODULES
 from .v1 import build_v1_router
 
@@ -147,6 +148,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # naming them and make only this route answer 500 (T-10-39).
         app.state.frame_participant_deps = build_frame_participant_deps(db=collection_repository)
 
+        # Google Health authorization (Phase 10.1, GHA-01): the same Mongo
+        # handle for ``participants``/``fitbits``, the auth Redis for the
+        # state nonces, link claims and migration locks (shared by both
+        # uvicorn workers), and a producer for ``scheduler_new``. Unset or
+        # invalid GOOGLE_HEALTH_* keys log one WARNING naming them (never a
+        # value) and make only the Google Health routes answer 503.
+        app.state.google_health_deps = build_google_health_deps(
+            db=collection_repository,
+            redis=redis_client,
+            producer_settings=ProducerSettings(),
+            auth_signing_secret=s.jwt_secret,
+        )
+
         yield
     finally:
         try:
@@ -188,6 +202,10 @@ def create_app() -> FastAPI:
     # handler then applies frame's admin scope and root group. Built, not
     # flipped: the edge's /api/participants group stays on frame (D-13).
     app.include_router(build_frame_participants_router())
+    # Google Health authorization (Phase 10.1): the staff link route behind
+    # require_write_principal, and the participant's authorize/finishAuth
+    # routes carrying the unauthenticated marker (D-11).
+    app.include_router(build_google_health_router())
 
     # Liveness: its access-log line is filtered at startup (D-16, see lifespan).
     @app.get(LIVENESS_PATH, tags=["meta"])

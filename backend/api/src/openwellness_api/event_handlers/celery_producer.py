@@ -40,6 +40,10 @@ from .ports import TaskPublishError
 
 PRODUCER_APP_NAME = "openwellness_api_producer"
 ROUTER_QUEUE = "celery"
+# The queue the new scheduler worker consumes. Must equal ``SCHEDULER_NEW`` in
+# ``scheduler/router/task_router.py:14``: a typo publishes successfully to a
+# queue no worker reads (D-06).
+SCHEDULER_NEW_QUEUE = "scheduler_new"
 
 _BROKER_TIMEOUT_SECONDS = 2
 _PUBLISH_RETRY_POLICY: dict[str, float | int] = {
@@ -147,8 +151,8 @@ class CeleryTaskPublisher:
                     self._app = build_producer_app(self._broker_url)
         return self._app
 
-    def publish(self, task_name: str, args: list[Any]) -> None:
-        """Publish ``task_name(*args)`` to queue ``celery``.
+    def publish(self, task_name: str, args: list[Any], queue: str = ROUTER_QUEUE) -> None:
+        """Publish ``task_name(*args)`` to ``queue`` (default ``celery``).
 
         Raises :class:`TaskPublishError` on a missing broker URL or any broker
         failure. The message names the cause's class, never the arguments.
@@ -156,6 +160,6 @@ class CeleryTaskPublisher:
         if not self._broker_url:
             raise TaskPublishError("CELERY_BROKER_URL is not set")
         try:
-            self.app.send_task(task_name, args=js_json_args(list(args)), queue=ROUTER_QUEUE)
+            self.app.send_task(task_name, args=js_json_args(list(args)), queue=queue)
         except Exception as exc:
             raise TaskPublishError(type(exc).__name__) from exc

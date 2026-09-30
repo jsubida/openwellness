@@ -77,6 +77,8 @@ def test_authorize_redirects_to_google_with_a_browser_bound_state(h: Harness) ->
         url = h.mint_link(client, pid)
         resp, state, cookie = h.authorize(client, url)
         claims = _decode_state(h, state)
+        # Read under the same frozen clock the nonce was stored with.
+        ttl = h.redis.ttl(f"gh:state:{claims['jti']}")
 
     location = urllib.parse.urlsplit(resp.headers["location"])
     assert f"{location.scheme}://{location.netloc}{location.path}" == (
@@ -104,7 +106,6 @@ def test_authorize_redirects_to_google_with_a_browser_bound_state(h: Harness) ->
     assert "max-age=900" in header.lower()
     assert len(base64.urlsafe_b64decode(cookie + "=" * (-len(cookie) % 4))) == 32
 
-    ttl = h.redis.ttl(f"gh:state:{claims['jti']}")
     assert 0 < ttl <= 900
 
 
