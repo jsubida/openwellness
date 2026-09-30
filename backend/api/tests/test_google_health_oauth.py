@@ -578,7 +578,15 @@ def test_no_sensitive_value_reaches_a_log_or_a_page(caplog: pytest.LogCaptureFix
             h.finish(client, code="PARTIAL-CODE-SENTINEL", state=state2, cookie=cookie2).text
         )
 
-    haystacks = [caplog.text, *bodies]
+    # Every server-side record. httpx/httpcore are the test client's own
+    # request logs (they print the URL it sent), not the app's.
+    server_log = "\n".join(
+        f"{r.name} {r.getMessage()} {r.exc_text or ''}"
+        for r in caplog.records
+        if not r.name.startswith(("httpx", "httpcore"))
+    )
+    assert "googleHealth/finishAuth" in server_log
+    haystacks = [server_log, *bodies]
     needles = [
         *sentinels.values(),
         "LEGACYOWNER-SENTINEL",

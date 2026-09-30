@@ -21,6 +21,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from ..config import AuthSettings
 from ..deps.principal import ALLOW_UNAUTHENTICATED, require_write_principal
 from ..event_handlers.celery_producer import CeleryTaskPublisher, ProducerSettings
 from ..event_handlers.mongo_readers import MongoParticipantReader
@@ -89,13 +90,27 @@ def build_google_health_deps(
 ) -> GoogleHealthDeps:
     """Production deps over the shared Mongo handle and Redis client.
 
-    Logs one WARNING naming unset keys, never a value; while any is unset
-    every Google Health route answers 503.
+    Validates the settings once: unset keys (by name) and, when any Google
+    key is set, the violated rules of :meth:`GoogleHealthSettings.problems`.
+    Any finding logs one WARNING listing names only, never a value, and makes
+    every Google Health route answer 503.
+
+    ``auth_signing_secret`` defaults to ``API_AUTH_JWT_SECRET`` read through
+    :class:`AuthSettings`; it is only compared, never logged or used to sign.
     """
     gh_settings = settings if settings is not None else GoogleHealthSettings()
+    if auth_signing_secret is None:
+        auth_signing_secret = AuthSettings().jwt_secret
     missing = gh_settings.missing_keys()
-    if missing:
-        logger.warning("googleHealth routes disabled until set: %s", ", ".join(missing))
+    any_set = len(missing) < len(gh_settings.required_keys())
+    rules = gh_settings.problems(auth_signing_secret) if any_set else []
+    if missing or rules:
+        parts = []
+        if missing:
+            parts.append("unset " + ", ".join(missing))
+        if rules:
+            parts.append("invalid " + ", ".join(rules))
+        logger.warning("googleHealth routes disabled until fixed: %s", "; ".join(parts))
     return GoogleHealthDeps(
         settings=gh_settings,
         tokens=GoogleHealthTokens(gh_settings, redis),
@@ -103,5 +118,5 @@ def build_google_health_deps(
         participants=MongoParticipantReader(db),
         google=google if google is not None else RequestsGoogleOAuthClient(gh_settings),
         publisher=publisher if publisher is not None else CeleryTaskPublisher(producer_settings),
-        disabled=tuple(missing),
+        disabled=(*missing, *rules),
     )

@@ -36,7 +36,7 @@ from ..deps.principal import Principal, get_principal
 from ..event_handlers.celery_producer import SCHEDULER_NEW_QUEUE
 from ..event_handlers.hapi import boom
 from ..event_handlers.ports import ParticipantReader, TaskPublisher
-from .google_client import GoogleOAuthClient, GoogleOAuthError
+from .google_client import GoogleOAuthClient, GoogleOAuthError, TokenGrant
 from .settings import GoogleHealthSettings
 from .store import GoogleHealthStore
 from .tokens import GoogleHealthTokenError, GoogleHealthTokens
@@ -192,6 +192,9 @@ def authorize(request: Request, t: Annotated[str | None, Query()] = None) -> Res
         return _unavailable()
     try:
         link = deps.tokens.verify_link(t)
+        if deps.tokens.is_link_claimed(link.jti):
+            logger.warning("googleHealth/authorize refused: link already used")
+            return _error()
         cookie = _new_cookie()
         state = deps.tokens.mint_state(
             link.participant_id, link.jti, link.exp, browser_hash(cookie)
@@ -243,6 +246,17 @@ def finish_auth(
     deps = get_google_health_deps(request)
     if deps is None or deps.disabled:
         return _unavailable()
+    if error is not None:
+        # The participant declined (or Google refused) consent. Nothing is
+        # claimed yet, and Google is not called.
+        logger.warning("googleHealth/finishAuth consent not granted")
+        return _error()
+    if not code or not state:
+        logger.warning("googleHealth/finishAuth refused: incomplete callback")
+        return _error()
+
+    # The cookie is checked against ``bh`` before the nonce is consumed, so a
+    # state replayed from another browser cannot burn the real one (T-10.1-73).
     cookie = request.cookies.get(COOKIE_NAME) or ""
     try:
         claims = deps.tokens.consume_state(state, browser_hash(cookie))
@@ -256,7 +270,23 @@ def finish_auth(
         return _error()
 
     try:
-        grant = deps.google.exchange_code(code or "")
+        grant = deps.google.exchange_code(code)
+    except GoogleOAuthError as exc:
+        logger.warning("googleHealth/finishAuth google failed: %s", exc.kind)
+        deps.tokens.release_link(claims.link_jti)
+        return _error()
+
+    missing_scope = set(deps.settings.scopes) - set(grant.scope.split())
+    if grant.refresh_token is None or missing_scope:
+        # Pitfall 5: granular consent or a missing refresh token. Nothing is
+        # stored; the link can be used again once the participant re-consents
+        # with every permission.
+        logger.warning("googleHealth/finishAuth rejected grant: incomplete")
+        _revoke_rejected_grant(deps, grant)
+        deps.tokens.release_link(claims.link_jti)
+        return _error()
+
+    try:
         identity = deps.google.get_identity(grant.access_token)
     except GoogleOAuthError as exc:
         logger.warning("googleHealth/finishAuth google failed: %s", exc.kind)
@@ -264,6 +294,7 @@ def finish_auth(
         return _error()
 
     now = int(deps.clock())
+    legacy_owners = deps.store.legacy_owner_ids(pid)
     migrated_at = deps.store.carried_migrated_at(pid) or now
     google_id = deps.store.insert_google_record(
         {
@@ -281,10 +312,57 @@ def finish_auth(
         }
     )
     superseded = deps.store.supersede_active(pid, google_id, now)
-    deps.publisher.publish(
-        COMPLETE_MIGRATION_TASK, [pid, google_id, superseded], queue=SCHEDULER_NEW_QUEUE
-    )
+
+    if legacy_owners and identity.legacy_user_id not in legacy_owners:
+        # T-10.1-15: possibly the wrong Google account for this participant.
+        logger.warning("googleHealth/finishAuth legacy account mismatch")
+
+    _publish_complete_migration(deps, pid, google_id, superseded)
     logger.info("googleHealth/finishAuth connected")
+    return _success()
+
+
+def _success() -> Response:
     response = _page(SUCCESS_PAGE, 200)
-    response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH, secure=True, httponly=True, samesite="lax")
+    response.delete_cookie(
+        COOKIE_NAME, path=COOKIE_PATH, secure=True, httponly=True, samesite="lax"
+    )
     return response
+
+
+def _publish_complete_migration(
+    deps: GoogleHealthDeps, pid: str, google_id: str, superseded: list[str]
+) -> None:
+    """Hand the migration to the scheduler. Ids only, never a token (T-10.1-19).
+
+    A failure is logged and swallowed: the record stays ``pending`` and the
+    backfill's reconcile phase re-publishes it (contract I5, T-10.1-20).
+    """
+    try:
+        deps.publisher.publish(
+            COMPLETE_MIGRATION_TASK, [pid, google_id, superseded], queue=SCHEDULER_NEW_QUEUE
+        )
+    except Exception as exc:
+        logger.error("googleHealth/finishAuth publish failed: %s", type(exc).__name__)
+
+
+def _revoke_rejected_grant(deps: GoogleHealthDeps, grant: TokenGrant) -> None:
+    """Revoke a rejected grant only when no active record can share it.
+
+    Contract revocation rule: revoke only when the identity lookup succeeds
+    and no GOOGLE_ACTIVE record holds the same ``healthUserId``. A re-consent
+    that unticked a scope shares the current connection's grant, and
+    revoking it could disconnect the participant.
+    """
+    try:
+        identity = deps.google.get_identity(grant.access_token)
+        revocable = deps.store.active_google_owner_of(identity.health_user_id) is None
+    except Exception:
+        revocable = False
+    if not revocable:
+        logger.warning("googleHealth/finishAuth revoke skipped")
+        return
+    try:
+        deps.google.revoke(grant.refresh_token or grant.access_token)
+    except Exception as exc:
+        logger.warning("googleHealth/finishAuth revoke failed: %s", type(exc).__name__)

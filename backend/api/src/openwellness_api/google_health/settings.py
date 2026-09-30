@@ -11,6 +11,7 @@ log or a traceback never prints one.
 from __future__ import annotations
 
 import re
+import urllib.parse
 from typing import Final, Literal
 
 from pydantic import Field
@@ -37,6 +38,9 @@ _REQUIRED: Final[tuple[str, ...]] = (
 )
 
 _STUDY_ID = re.compile(r"^[0-9a-fA-F]{24}$")
+_CLIENT_ID_SUFFIX: Final = ".apps.googleusercontent.com"
+_MIN_SECRET_LENGTH: Final = 32
+_SECRETS: Final[tuple[str, ...]] = ("link_secret", "state_secret", "webhook_secret")
 
 
 class GoogleHealthSettings(BaseSettings):
@@ -68,11 +72,43 @@ class GoogleHealthSettings(BaseSettings):
         """Base of the staff link: ``<origin>/api/googleHealth/authorize``."""
         return self.public_base_url.rstrip("/") + AUTHORIZE_PATH
 
+    @staticmethod
+    def required_keys() -> tuple[str, ...]:
+        return _REQUIRED
+
     def missing_keys(self) -> list[str]:
         """Environment names of the unset required keys. Names only, never values."""
         return [
             f"GOOGLE_HEALTH_{name.upper()}" for name in _REQUIRED if not getattr(self, name)
         ]
+
+    def problems(self, auth_signing_secret: str) -> list[str]:
+        """Names of the violated rules (T-10.1-75). Never a value.
+
+        ``auth_signing_secret`` is ``ow_api``'s own access-token signing
+        secret, compared only to reject its reuse.
+        """
+        found: list[str] = []
+        values = [getattr(self, name) for name in _SECRETS]
+        for name, value in zip(_SECRETS, values, strict=True):
+            if len(value) < _MIN_SECRET_LENGTH:
+                found.append(f"{name}_short")
+        present = [value for value in values if value]
+        if len(set(present)) != len(present):
+            found.append("secrets_not_distinct")
+        if auth_signing_secret and auth_signing_secret in present:
+            found.append("secret_reuses_api_jwt")
+        if not _is_https_origin(self.public_base_url):
+            found.append("public_base_url_not_https_origin")
+        if (
+            not self.client_id.endswith(_CLIENT_ID_SUFFIX)
+            or len(self.client_id) == len(_CLIENT_ID_SUFFIX)
+        ):
+            found.append("client_id_format")
+        hold = self.migration_hold.strip()
+        if hold and _hold_malformed(hold):
+            found.append("migration_hold_malformed")
+        return found
 
     def held_study_ids(self) -> frozenset[str] | Literal["*"]:
         """The migration hold: ``"*"`` for every study, else the held study ids.
@@ -95,3 +131,23 @@ def _hold_malformed(raw: str) -> bool:
         return False
     items = [item.strip() for item in raw.split(",")]
     return any(not _STUDY_ID.match(item) for item in items)
+
+
+def _is_https_origin(value: str) -> bool:
+    try:
+        parts = urllib.parse.urlsplit(value)
+        port_ok = parts.port is None or parts.port > 0
+    except ValueError:
+        return False
+    return (
+        parts.scheme == "https"
+        and bool(parts.hostname)
+        and parts.username is None
+        and parts.password is None
+        and port_ok
+        and parts.path in ("", "/")
+        and not parts.query
+        and not parts.fragment
+        and "?" not in value
+        and "#" not in value
+    )

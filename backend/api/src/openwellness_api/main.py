@@ -57,6 +57,35 @@ class LivenessAccessLogFilter(logging.Filter):
 
 _LIVENESS_FILTER = LivenessAccessLogFilter()
 
+GOOGLE_HEALTH_PREFIX = "/api/googlehealth"
+
+
+class GoogleHealthAccessLogFilter(logging.Filter):
+    """Drop the query string from uvicorn access records under ``/api/googleHealth``.
+
+    ``authorize?t=`` carries the link token and ``finishAuth?code=&state=``
+    the OAuth code and state (research Pitfall 7, T-10.1-17). The record is
+    kept, with the path only; every other record passes untouched. The
+    prefix is compared case-insensitively, so an odd-cased probe of the same
+    group cannot log its query either.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
+            path, sep, _query = args[2].partition("?")
+            if sep and path.lower().startswith(GOOGLE_HEALTH_PREFIX):
+                record.args = (*args[:2], path, *args[3:])
+        return True
+
+
+_GOOGLE_HEALTH_FILTER = GoogleHealthAccessLogFilter()
+
+
+def install_google_health_access_log_filter() -> None:
+    """Attach the Google Health query filter to uvicorn's access logger (idempotent)."""
+    logging.getLogger("uvicorn.access").addFilter(_GOOGLE_HEALTH_FILTER)
+
 
 def install_liveness_access_log_filter() -> None:
     """Attach the liveness filter to uvicorn's access logger (idempotent)."""
@@ -75,6 +104,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # here because the access logger only matters under a real server (the
     # test fixture never runs the lifespan).
     install_liveness_access_log_filter()
+    # T-10.1-17: the Google Health authorize and finishAuth URLs carry a link
+    # token, an OAuth code and a state in their query strings.
+    install_google_health_access_log_filter()
 
     # --- Auth feature wiring (settings + boot guard) -------------------- #
     auth_container = AuthContainer()

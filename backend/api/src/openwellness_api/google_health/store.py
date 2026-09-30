@@ -14,6 +14,7 @@ from bson import ObjectId
 from openwellness_core.domain.models.fitbit import (
     active_filter,
     google_active_filter,
+    legacy_active_filter,
 )
 
 FITBITS: Final = "fitbits"
@@ -71,3 +72,14 @@ class GoogleHealthStore:
         ]
         stamps = [v for v in values if isinstance(v, int) and not isinstance(v, bool)]
         return min(stamps) if stamps else None
+
+    def legacy_owner_ids(self, participant_id: str) -> list[str]:
+        """``ownerId`` of the participant's LEGACY_ACTIVE records (mismatch check)."""
+        return [
+            str(doc["ownerId"])
+            for doc in self._fitbits.find(
+                {"participantId": participant_id, **legacy_active_filter()},
+                {"ownerId": 1},
+            )
+            if doc.get("ownerId") is not None
+        ]
