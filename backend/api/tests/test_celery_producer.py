@@ -240,3 +240,23 @@ def test_js_json_args_leaves_finite_args_untouched_and_handles_deep_nesting() ->
     for _ in range(5001):
         out = out[0]
     assert out is None
+
+
+def test_publish_defaults_to_the_router_queue_and_accepts_scheduler_new() -> None:
+    """D-06: Google Health tasks name ``scheduler_new`` directly; every Phase 10
+    handler keeps the ``celery`` default."""
+    from openwellness_api.event_handlers.celery_producer import SCHEDULER_NEW_QUEUE
+
+    assert SCHEDULER_NEW_QUEUE == "scheduler_new"
+    publisher = _publisher("memory://")
+
+    publisher.publish("jobs.sandbox.sayWee", ["default"])
+    publisher.publish("googleHealth.completeMigration", ["p", "g", []], queue=SCHEDULER_NEW_QUEUE)
+
+    (default_message,) = _drain(publisher, "celery")
+    assert default_message.decode()[0] == ["default"]
+    assert default_message.delivery_info["routing_key"] == "celery"
+    (new_message,) = _drain(publisher, "scheduler_new")
+    assert new_message.headers["task"] == "googleHealth.completeMigration"
+    assert new_message.decode()[0] == ["p", "g", []]
+    assert new_message.delivery_info["routing_key"] == "scheduler_new"
