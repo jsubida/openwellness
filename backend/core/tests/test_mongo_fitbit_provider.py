@@ -134,7 +134,7 @@ def test_migrated_participant_resolves_to_google_record():
     record = repo.get_by_participant_id(P)
 
     assert record is not None
-    assert record.id == str(google_id)
+    assert str(record.id) == str(google_id)
     assert record.provider == "googleHealth"
     assert record.health_user_id == "health-user-1"
     assert record.expires_at == 1_800_000_000
@@ -156,7 +156,7 @@ def test_legacy_document_loads_with_all_d13_attributes_none():
     record = repo.get_by_participant_id(P)
 
     assert isinstance(record, Fitbit)
-    assert record.id == str(legacy_id)
+    assert str(record.id) == str(legacy_id)
     assert record.owner_id == "LEGACY1"
     for name in D13_SNAKE:
         assert getattr(record, name) is None, name
