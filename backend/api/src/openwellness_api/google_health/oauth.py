@@ -39,6 +39,7 @@ from ..event_handlers.hapi import boom
 from ..event_handlers.ports import ParticipantReader, TaskPublisher
 from .google_client import GoogleOAuthClient, GoogleOAuthError, TokenGrant
 from .settings import GoogleHealthSettings
+from .signature import SignatureVerifier
 from .store import GoogleHealthStore
 from .tokens import GoogleHealthTokenError, GoogleHealthTokens
 
@@ -86,10 +87,12 @@ UNAVAILABLE_PAGE: Final = _html(
 
 @dataclass(frozen=True)
 class GoogleHealthDeps:
-    """Everything the three routes touch.
+    """Everything the Google Health routes touch.
 
     ``disabled`` lists setting names or rule names that are unset or
     invalid; while it is non-empty every route answers 503.
+    ``signature_verifier`` checks notification signatures (10.1-07); while it
+    is ``None`` the notification receiver answers data notifications 503.
     """
 
     settings: GoogleHealthSettings
@@ -100,6 +103,7 @@ class GoogleHealthDeps:
     publisher: TaskPublisher
     clock: Callable[[], float] = time.time
     disabled: tuple[str, ...] = field(default=())
+    signature_verifier: SignatureVerifier | None = None
 
 
 def get_google_health_deps(request: Request) -> GoogleHealthDeps | None:

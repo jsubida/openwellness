@@ -35,6 +35,7 @@ from .oauth import (
     get_google_health_deps,
 )
 from .settings import GoogleHealthSettings
+from .signature import SignatureVerifier
 from .store import GoogleHealthStore
 from .tokens import GoogleHealthTokens
 
@@ -87,6 +88,7 @@ def build_google_health_deps(
     google: GoogleOAuthClient | None = None,
     publisher: TaskPublisher | None = None,
     auth_signing_secret: str | None = None,
+    signature_verifier: SignatureVerifier | None = None,
 ) -> GoogleHealthDeps:
     """Production deps over the shared Mongo handle and Redis client.
 
@@ -119,4 +121,5 @@ def build_google_health_deps(
         google=google if google is not None else RequestsGoogleOAuthClient(gh_settings),
         publisher=publisher if publisher is not None else CeleryTaskPublisher(producer_settings),
         disabled=(*missing, *rules),
+        signature_verifier=signature_verifier,
     )

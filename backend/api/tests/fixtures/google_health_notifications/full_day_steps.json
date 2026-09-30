@@ -1,0 +1,35 @@
+{
+  "data": {
+    "version": "1",
+    "clientProvidedSubscriptionName": "auto-503461148219-lindasubscriber-WEBHOOK_DATA_TYPE_STEPS",
+    "healthUserId": "343864966078399341",
+    "operation": "UPSERT",
+    "dataType": "steps",
+    "intervals": [
+      {
+        "civilDateTimeInterval": {
+          "startDateTime": {
+            "date": {
+              "year": 2026,
+              "month": 7,
+              "day": 14
+            },
+            "time": {}
+          },
+          "endDateTime": {
+            "date": {
+              "year": 2026,
+              "month": 7,
+              "day": 15
+            },
+            "time": {}
+          }
+        },
+        "civilIso8601TimeInterval": {
+          "startTime": "2026-07-14T00:00:00",
+          "endTime": "2026-07-15T00:00:00"
+        }
+      }
+    ]
+  }
+}
