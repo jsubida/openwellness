@@ -40,7 +40,7 @@ from .oauth import (
     get_google_health_deps,
 )
 from .settings import GoogleHealthSettings
-from .signature import SignatureVerifier
+from .signature import SignatureVerifier, TinkSignatureVerifier
 from .store import GoogleHealthStore
 from .tokens import GoogleHealthTokens
 
@@ -105,6 +105,10 @@ def build_google_health_deps(
 
     ``auth_signing_secret`` defaults to ``API_AUTH_JWT_SECRET`` read through
     :class:`AuthSettings`; it is only compared, never logged or used to sign.
+
+    ``signature_verifier`` defaults to a :class:`TinkSignatureVerifier` on
+    ``settings.keyset_url``; it fetches the keyset on first use, in the
+    threadpool, never here.
     """
     gh_settings = settings if settings is not None else GoogleHealthSettings()
     if auth_signing_secret is None:
@@ -127,5 +131,9 @@ def build_google_health_deps(
         google=google if google is not None else RequestsGoogleOAuthClient(gh_settings),
         publisher=publisher if publisher is not None else CeleryTaskPublisher(producer_settings),
         disabled=(*missing, *rules),
-        signature_verifier=signature_verifier,
+        signature_verifier=(
+            signature_verifier
+            if signature_verifier is not None
+            else TinkSignatureVerifier(gh_settings.keyset_url)
+        ),
     )

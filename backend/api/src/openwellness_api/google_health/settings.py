@@ -63,6 +63,10 @@ class GoogleHealthSettings(BaseSettings):
     token_endpoint: str = "https://oauth2.googleapis.com/token"
     revoke_endpoint: str = "https://oauth2.googleapis.com/revoke"
     identity_url: str = "https://health.googleapis.com/v4/users/me/identity"
+    keyset_url: str = (
+        "https://www.gstatic.com/googlehealthapi/webhooks/webhooks_public_keyset.json"
+    )
+    """Google's webhook signing keyset (``GOOGLE_HEALTH_KEYSET_URL``); public keys only."""
 
     def redirect_uri(self) -> str:
         """The registered OAuth redirect URI (contract "Origins")."""
@@ -108,6 +112,8 @@ class GoogleHealthSettings(BaseSettings):
         hold = self.migration_hold.strip()
         if hold and _hold_malformed(hold):
             found.append("migration_hold_malformed")
+        if not _is_https_url(self.keyset_url):
+            found.append("keyset_url_not_https")
         return found
 
     def held_study_ids(self) -> frozenset[str] | Literal["*"]:
@@ -131,6 +137,14 @@ def _hold_malformed(raw: str) -> bool:
         return False
     items = [item.strip() for item in raw.split(",")]
     return any(not _STUDY_ID.match(item) for item in items)
+
+
+def _is_https_url(value: str) -> bool:
+    try:
+        parts = urllib.parse.urlsplit(value)
+    except ValueError:
+        return False
+    return parts.scheme == "https" and bool(parts.hostname) and parts.username is None
 
 
 def _is_https_origin(value: str) -> bool:

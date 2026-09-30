@@ -1,0 +1,20 @@
+{
+  "source": "tests/fixtures/google_health_signature/vectors.json (case 'valid'); regenerate with gen_vectors.sh",
+  "keyset": {
+    "primaryKeyId": 1592592897,
+    "key": [
+      {
+        "keyData": {
+          "typeUrl": "type.googleapis.com/google.crypto.tink.EcdsaPublicKey",
+          "value": "EgYIAxACGAIaIQDIC4rbTeqd8PsUjzOWTudv3Qc/fj8oggt9YYe9fGGcoCIhAP7Y9jh5u0sDsA6l3B8uwtLmTKzxEw/40A34G3wAsoD6",
+          "keyMaterialType": "ASYMMETRIC_PUBLIC"
+        },
+        "status": "ENABLED",
+        "keyId": 1592592897,
+        "outputPrefixType": "TINK"
+      }
+    ]
+  },
+  "body": "{\"data\":{\"version\":\"1\",\"clientProvidedSubscriptionName\":\"vector\",\"healthUserId\":\"vector-user\",\"operation\":\"UPSERT\",\"dataType\":\"steps\",\"intervals\":[{\"civilIso8601TimeInterval\":{\"startTime\":\"2026-09-01T08:00:00\",\"endTime\":\"2026-09-01T08:05:00\"}}]}}",
+  "signature": "AV7tCgEwRAIgeqqoDnvd/slp5YZDUE3qKEbShy25AnUAz1WIJgmrMNgCIAUA61lzd3vs2UKIgwu86ZcskNQQWuAfMpuM1KIAGCs2"
+}
