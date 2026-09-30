@@ -1,6 +1,6 @@
-"""Google Health authorization in ``ow_api`` (opserver Phase 10.1, GHA-01).
+"""Google Health in ``ow_api`` (opserver Phase 10.1, GHA-01, GHA-02).
 
-Three routes, all under the edge group ``/api/googleHealth`` (D-05):
+Four routes, all under the edge group ``/api/googleHealth`` (D-05):
 
 - ``POST /api/googleHealth/links``: staff mint a participant-bound link.
   Router-level ``require_write_principal`` plus the ``admin`` role.
@@ -8,6 +8,10 @@ Three routes, all under the edge group ``/api/googleHealth`` (D-05):
   the participant's browser, unauthenticated by design. Each carries the
   ``x-allow-unauthenticated`` marker; the link and state tokens are their
   credentials (D-11).
+- ``POST /api/googleHealth/notifications``: Google's webhook subscriber,
+  unauthenticated by marker; it checks the shared ``Authorization`` secret
+  and the ``GOOGLE-HEALTH-API-SIGNATURE`` itself and only enqueues
+  (:mod:`.notifications`).
 
 The routes read ``app.state.google_health_deps``, built in the lifespan by
 :func:`build_google_health_deps`. While a required setting is unset or
@@ -27,6 +31,7 @@ from ..event_handlers.celery_producer import CeleryTaskPublisher, ProducerSettin
 from ..event_handlers.mongo_readers import MongoParticipantReader
 from ..event_handlers.ports import TaskPublisher
 from .google_client import GoogleOAuthClient, RequestsGoogleOAuthClient
+from .notifications import build_notifications_router
 from .oauth import (
     GoogleHealthDeps,
     authorize,
@@ -76,6 +81,7 @@ def build_google_health_router() -> APIRouter:
     router = APIRouter()
     router.include_router(staff)
     router.include_router(browser)
+    router.include_router(build_notifications_router())
     return router
 
 
