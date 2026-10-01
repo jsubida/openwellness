@@ -716,3 +716,28 @@ def test_a_lease_lost_before_commit_leaves_only_a_pending_claim(h: Harness) -> N
     assert h.google_records() == []
     (key,) = _claims(h)
     assert 0 < h.redis.pttl(key) <= h.settings.lock_ttl_ms
+
+
+def test_a_refused_insert_whose_release_fails_says_a_new_link_is_needed(
+    h: Harness, caplog: pytest.LogCaptureFixture
+) -> None:
+    pid = h.seed_participant()
+    client, state, cookie = _prepared(h, pid, "c1")
+
+    def refused() -> None:
+        raise WriteError("injected write error", code=121)
+
+    _swap(h, store=HookedStore(h.deps.store, {"insert_google_record": refused}))
+    h.deps.tokens.release_link = lambda claim: False  # type: ignore[method-assign]
+    with caplog.at_level(logging.ERROR):
+        resp = h.finish(client, code="c1", state=state, cookie=cookie)
+
+    assert _is_error(resp) and resp.status_code == 500
+    assert h.google_records() == []
+    errors = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+    assert errors == [
+        "googleHealth/finishAuth store failed: WriteError",
+        "googleHealth/finishAuth link release failed after a refused insert: mint a new link",
+    ]
+    # Staff can always mint a fresh link for the participant.
+    assert h.mint_link(h.client(), pid)

@@ -440,9 +440,14 @@ def _write_google_record(
         google_id = deps.store.insert_google_record(doc)
     except WriteError as exc:
         # The server refused the insert: nothing was written, so the link
-        # can be retried.
+        # can be retried. The claim is already committed to the link's
+        # lifetime; if Redis also fails to release it, only a new link helps.
         logger.error("googleHealth/finishAuth store failed: %s", type(exc).__name__)
-        _release_link(deps, claim)
+        if not deps.tokens.release_link(claim):
+            logger.error(
+                "googleHealth/finishAuth link release failed after a refused insert: "
+                "mint a new link"
+            )
         return _error(500)
     except Exception as exc:
         # A timeout or dropped connection may follow a committed insert.
