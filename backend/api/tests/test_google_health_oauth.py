@@ -24,6 +24,10 @@ from bson import ObjectId
 
 from openwellness_api.deps.principal import Principal
 from openwellness_api.event_handlers.ports import TaskPublishError
+from openwellness_api.google_health.google_client import (
+    GoogleOAuthError,
+    RequestsGoogleOAuthClient,
+)
 from openwellness_api.google_health.oauth import browser_hash
 
 from .google_health_harness import (
@@ -645,3 +649,72 @@ def test_access_log_filter_is_installed_once() -> None:
     install_google_health_access_log_filter()
     access = logging.getLogger("uvicorn.access")
     assert sum(isinstance(x, GoogleHealthAccessLogFilter) for x in access.filters) == 1
+
+
+def _hu_lock(health_user_id: str) -> str:
+    return "gh:lock:hu:" + hashlib.sha256(health_user_id.encode()).hexdigest()[:32]
+
+
+def test_a_rejected_grant_is_revoked_under_the_locks_and_they_are_released(h: Harness) -> None:
+    pid = h.seed_participant()
+    h.google.add("c1", access="a1", refresh=None, health_user_id="H1", legacy_user_id=None)
+    seen: list[list[str]] = []
+    revoke = h.google.revoke
+
+    def revoke_seeing_locks(token: str) -> None:
+        seen.append(sorted(h.redis.keys("gh:lock:*")))
+        revoke(token)
+
+    h.google.revoke = revoke_seeing_locks  # type: ignore[method-assign]
+    resp = h.run_flow(pid, "c1")
+    assert resp.status_code == 400
+    assert h.google.revokes == ["a1"]
+    assert seen == [sorted([f"gh:lock:pid:{pid}", _hu_lock("H1")])]
+    assert h.redis.keys("gh:lock:*") == []
+
+
+def test_a_rejected_grant_is_not_revoked_while_the_account_is_locked_elsewhere(
+    h: Harness, caplog: pytest.LogCaptureFixture
+) -> None:
+    pid = h.seed_participant()
+    h.google.add("c1", access="a1", refresh=None, health_user_id="H1", legacy_user_id=None)
+    # A concurrent finishAuth for the same account is mid-insert.
+    h.redis.set(_hu_lock("H1"), "another-owner", px=60000)
+    with caplog.at_level(logging.WARNING):
+        resp = h.run_flow(pid, "c1")
+    assert resp.status_code == 400
+    assert h.google.revokes == []
+    assert "googleHealth/finishAuth revoke skipped" in caplog.text
+    assert h.redis.get(_hu_lock("H1")) == "another-owner"
+    assert h.redis.get(f"gh:lock:pid:{pid}") is None
+
+
+class _RedirectSession:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def _answer(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+
+        class Response:
+            status_code = 302
+
+            def json(self) -> dict:
+                return {"access_token": "a", "expires_in": 1, "scope": FULL_SCOPE}
+
+        return Response()
+
+    def request(self, method: str, url: str, **kwargs: object) -> object:
+        return self._answer(**kwargs)
+
+    def post(self, url: str, **kwargs: object) -> object:
+        return self._answer(**kwargs)
+
+
+@pytest.mark.parametrize("call", ["exchange_code", "get_identity", "revoke"])
+def test_the_google_client_never_follows_a_redirect(h: Harness, call: str) -> None:
+    session = _RedirectSession()
+    client = RequestsGoogleOAuthClient(h.settings, session=session)  # type: ignore[arg-type]
+    with pytest.raises(GoogleOAuthError):
+        getattr(client, call)("x")
+    assert [kwargs.get("allow_redirects") for kwargs in session.calls] == [False]

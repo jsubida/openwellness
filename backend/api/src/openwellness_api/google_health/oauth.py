@@ -327,7 +327,7 @@ def finish_auth(
         # stored; the link can be used again once the participant re-consents
         # with every permission.
         logger.warning("googleHealth/finishAuth rejected grant: incomplete")
-        _revoke_rejected_grant(deps, grant)
+        _revoke_rejected_grant(deps, pid, grant)
         _release_link(deps, link_claim)
         return _error()
 
@@ -454,23 +454,38 @@ def _publish_complete_migration(
         logger.error("googleHealth/finishAuth publish failed: %s", type(exc).__name__)
 
 
-def _revoke_rejected_grant(deps: GoogleHealthDeps, grant: TokenGrant) -> None:
+def _revoke_rejected_grant(deps: GoogleHealthDeps, pid: str, grant: TokenGrant) -> None:
     """Revoke a rejected grant only when no active record can share it.
 
     Contract revocation rule: revoke only when the identity lookup succeeds
     and no GOOGLE_ACTIVE record holds the same ``healthUserId``. A re-consent
     that unticked a scope shares the current connection's grant, and
     revoking it could disconnect the participant.
+
+    The check and the revoke run under the participant and account locks, so
+    a concurrent finishAuth cannot insert an active record for the same
+    account between them. A lock held elsewhere skips the revoke.
     """
     try:
         identity = deps.google.get_identity(grant.access_token)
-        revocable = deps.store.active_google_owner_of(identity.health_user_id) is None
     except Exception:
-        revocable = False
-    if not revocable:
+        logger.warning("googleHealth/finishAuth revoke skipped")
+        return
+    locks = deps.tokens.acquire_locks(pid, identity.health_user_id)
+    if locks is None:
         logger.warning("googleHealth/finishAuth revoke skipped")
         return
     try:
-        deps.google.revoke(grant.refresh_token or grant.access_token)
-    except Exception as exc:
-        logger.warning("googleHealth/finishAuth revoke failed: %s", type(exc).__name__)
+        try:
+            revocable = deps.store.active_google_owner_of(identity.health_user_id) is None
+        except Exception:
+            revocable = False
+        if not revocable:
+            logger.warning("googleHealth/finishAuth revoke skipped")
+            return
+        try:
+            deps.google.revoke(grant.refresh_token or grant.access_token)
+        except Exception as exc:
+            logger.warning("googleHealth/finishAuth revoke failed: %s", type(exc).__name__)
+    finally:
+        deps.tokens.release_locks(locks)

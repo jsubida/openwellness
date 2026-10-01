@@ -112,18 +112,23 @@ class RequestsGoogleOAuthClient:
                 self._settings.revoke_endpoint,
                 data={"token": token},
                 timeout=_TIMEOUT_SECONDS,
+                allow_redirects=False,
             )
         except Exception as exc:
             raise GoogleOAuthError("revoke_failed") from exc
-        if response.status_code >= 400:
+        if not _ok(response.status_code):
             raise GoogleOAuthError("revoke_failed")
 
     def _json(self, kind: str, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
         try:
-            response = self._session.request(method, url, timeout=_TIMEOUT_SECONDS, **kwargs)
+            # A redirect is never followed: it could carry the code, the client
+            # secret or the bearer token off Google's HTTPS endpoints.
+            response = self._session.request(
+                method, url, timeout=_TIMEOUT_SECONDS, allow_redirects=False, **kwargs
+            )
         except Exception as exc:
             raise GoogleOAuthError(kind) from exc
-        if response.status_code >= 400:
+        if not _ok(response.status_code):
             raise GoogleOAuthError(kind)
         try:
             body = response.json()
@@ -132,3 +137,8 @@ class RequestsGoogleOAuthClient:
         if not isinstance(body, dict):
             raise GoogleOAuthError(kind)
         return body
+
+
+def _ok(status: int) -> bool:
+    """2xx only: a redirect is a failure, not something to follow."""
+    return 200 <= status < 300

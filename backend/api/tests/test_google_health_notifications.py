@@ -591,3 +591,19 @@ def test_logs_never_carry_the_body_secret_signature_record_or_user_id(
     assert "googleHealth/notifications" in text
     for sentinel in (user, record, body_marker, signature, rig.secret):
         assert sentinel not in text
+
+
+@pytest.mark.parametrize("data_type", ["heart_rate", "total_calories_burned", "heart-rate", "Steps"])
+def test_a_google_data_type_with_underscores_or_capitals_is_enqueued(data_type: str) -> None:
+    rig = Rig()
+    resp = rig.post(dumps([notification(data_type=data_type)]))
+    assert resp.status_code == 204
+    assert [call[1][1] for call in rig.calls] == [data_type]
+
+
+@pytest.mark.parametrize("data_type", ["has space", "semi;colon", "x" * 65])
+def test_a_data_type_outside_the_safe_charset_is_dropped(data_type: str) -> None:
+    rig = Rig()
+    resp = rig.post(dumps([notification(data_type=data_type)]))
+    assert resp.status_code == 204
+    assert rig.calls == []

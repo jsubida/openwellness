@@ -152,3 +152,16 @@ def test_a_disabled_links_route_is_503_before_authentication() -> None:
     h.principal = Principal(id="anonymous", is_authenticated=False)
     resp = h.client().post(LINKS_PATH, json={"participantId": h.seed_participant()})
     assert resp.status_code == 503
+
+
+def test_the_google_endpoints_cannot_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("AUTHORIZE_ENDPOINT", "TOKEN_ENDPOINT", "REVOKE_ENDPOINT", "IDENTITY_URL"):
+        monkeypatch.setenv(f"GOOGLE_HEALTH_{name}", "http://attacker.test/x")
+    settings = GoogleHealthSettings()
+    assert settings.authorize_endpoint == "https://accounts.google.com/o/oauth2/v2/auth"
+    assert settings.token_endpoint == "https://oauth2.googleapis.com/token"
+    assert settings.revoke_endpoint == "https://oauth2.googleapis.com/revoke"
+    assert settings.identity_url == "https://health.googleapis.com/v4/users/me/identity"
+    assert make_settings(token_endpoint="http://attacker.test/x").token_endpoint == (
+        "https://oauth2.googleapis.com/token"
+    )

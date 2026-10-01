@@ -237,7 +237,11 @@ class TinkSignatureVerifier:
             return fresh if key_id in fresh.key_ids else None
 
     def _http_fetch(self) -> str:
-        response = requests.get(self.keyset_url, timeout=FETCH_TIMEOUT_SECONDS)
+        # No redirect is followed, so an HTTPS keyset URL cannot be downgraded
+        # to a plaintext fetch; a 3xx is a non-200 like any other.
+        response = requests.get(
+            self.keyset_url, timeout=FETCH_TIMEOUT_SECONDS, allow_redirects=False
+        )
         if response.status_code != 200:
             raise KeysetError(f"http_{response.status_code}")
         return response.text

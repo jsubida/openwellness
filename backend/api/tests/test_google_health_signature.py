@@ -283,16 +283,17 @@ class FakeResponse:
 def test_the_default_fetch_uses_the_keyset_url_and_a_five_second_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    seen: list[tuple[str, Any]] = []
+    seen: list[tuple[str, Any, Any]] = []
 
-    def fake_get(url: str, timeout: Any = None, **_: Any) -> FakeResponse:
-        seen.append((url, timeout))
+    def fake_get(url: str, timeout: Any = None, **kwargs: Any) -> FakeResponse:
+        seen.append((url, timeout, kwargs.get("allow_redirects")))
         return FakeResponse()
 
     monkeypatch.setattr(signature_module.requests, "get", fake_get)
     verifier = TinkSignatureVerifier("https://keys.example.test/keyset.json")
     assert verifier.verify(*case_args("valid")) is True
-    assert seen == [("https://keys.example.test/keyset.json", FETCH_TIMEOUT_SECONDS)]
+    # No redirect is followed: an HTTPS keyset URL cannot downgrade to HTTP.
+    assert seen == [("https://keys.example.test/keyset.json", FETCH_TIMEOUT_SECONDS, False)]
     assert FETCH_TIMEOUT_SECONDS == 5
 
 

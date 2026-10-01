@@ -134,8 +134,10 @@ class _Interval(_Model):
 _HealthUserId = Annotated[
     str, StringConstraints(min_length=1, max_length=256, pattern=r"^[\x21-\x7e]+$")
 ]
+# Opaque Google identifier: any ASCII letters, digits, ``-`` or ``_`` (both
+# ``heart-rate`` and ``heart_rate`` forms), bounded so it is safe on the queue.
 _DataType = Annotated[
-    str, StringConstraints(min_length=1, max_length=64, pattern=r"^[a-z0-9-]+$")
+    str, StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
 ]
 
 

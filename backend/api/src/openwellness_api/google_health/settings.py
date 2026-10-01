@@ -25,6 +25,13 @@ DEFAULT_SCOPES: Final[tuple[str, ...]] = (
 )
 """The four locked read-only scopes (contract "Scopes", D-18)."""
 
+AUTHORIZE_ENDPOINT: Final = "https://accounts.google.com/o/oauth2/v2/auth"
+TOKEN_ENDPOINT: Final = "https://oauth2.googleapis.com/token"
+REVOKE_ENDPOINT: Final = "https://oauth2.googleapis.com/revoke"
+IDENTITY_URL: Final = "https://health.googleapis.com/v4/users/me/identity"
+"""Google's OAuth and identity endpoints. Constants, not settings: the code,
+client secret and bearer token they receive must never go elsewhere."""
+
 FINISH_AUTH_PATH: Final = "/api/googleHealth/finishAuth"
 AUTHORIZE_PATH: Final = "/api/googleHealth/authorize"
 
@@ -58,10 +65,6 @@ class GoogleHealthSettings(BaseSettings):
     state_ttl_seconds: int = 900
     lock_ttl_ms: int = 60000
 
-    authorize_endpoint: str = "https://accounts.google.com/o/oauth2/v2/auth"
-    token_endpoint: str = "https://oauth2.googleapis.com/token"
-    revoke_endpoint: str = "https://oauth2.googleapis.com/revoke"
-    identity_url: str = "https://health.googleapis.com/v4/users/me/identity"
     keyset_url: str = (
         "https://www.gstatic.com/googlehealthapi/webhooks/webhooks_public_keyset.json"
     )
@@ -71,6 +74,22 @@ class GoogleHealthSettings(BaseSettings):
     def scopes(self) -> tuple[str, ...]:
         """The locked scopes. Not a field, so no ``GOOGLE_HEALTH_SCOPES`` can widen them."""
         return DEFAULT_SCOPES
+
+    @property
+    def authorize_endpoint(self) -> str:
+        return AUTHORIZE_ENDPOINT
+
+    @property
+    def token_endpoint(self) -> str:
+        return TOKEN_ENDPOINT
+
+    @property
+    def revoke_endpoint(self) -> str:
+        return REVOKE_ENDPOINT
+
+    @property
+    def identity_url(self) -> str:
+        return IDENTITY_URL
 
     def redirect_uri(self) -> str:
         """The registered OAuth redirect URI (contract "Origins")."""
