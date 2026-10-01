@@ -741,3 +741,36 @@ def test_a_refused_insert_whose_release_fails_says_a_new_link_is_needed(
     ]
     # Staff can always mint a fresh link for the participant.
     assert h.mint_link(h.client(), pid)
+
+
+def test_a_lease_lost_during_the_write_is_reported(
+    h: Harness, caplog: pytest.LogCaptureFixture
+) -> None:
+    pid = h.seed_participant()
+    client, state, cookie = _prepared(h, pid, "c1")
+
+    def stall_past_the_lease() -> None:
+        # This worker paused after the renewal; another request took the lock.
+        h.redis.set(_hu_key("H1"), "another-owner", px=60000)
+
+    _swap(h, store=HookedStore(h.deps.store, {"insert_google_record": stall_past_the_lease}))
+    with caplog.at_level(logging.ERROR):
+        resp = h.finish(client, code="c1", state=state, cookie=cookie)
+
+    assert _is_success(resp)
+    assert len(h.google_records()) == 1
+    errors = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+    assert errors == ["googleHealth/finishAuth lock lease lost during write"]
+    # Another request's lock is left alone.
+    assert h.redis.get(_hu_key("H1")) == "another-owner"
+
+
+def test_a_write_inside_the_lease_reports_nothing(
+    h: Harness, caplog: pytest.LogCaptureFixture
+) -> None:
+    pid = h.seed_participant()
+    client, state, cookie = _prepared(h, pid, "c1")
+    with caplog.at_level(logging.ERROR):
+        resp = h.finish(client, code="c1", state=state, cookie=cookie)
+    assert _is_success(resp)
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []

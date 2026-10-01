@@ -302,6 +302,13 @@ class GoogleHealthTokens:
         except Exception:
             return False
 
+    def holds_locks(self, locks: MigrationLocks) -> bool:
+        """Whether both keys still hold this request's token. ``False`` on a Redis failure."""
+        try:
+            return all(_owned(self._redis.get(key), locks.token) for key in locks.keys)
+        except Exception:
+            return False
+
     def release_locks(self, locks: MigrationLocks) -> None:
         """Delete each lock key only while it still holds this request's token."""
         for key in locks.keys:

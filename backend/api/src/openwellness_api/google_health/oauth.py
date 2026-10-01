@@ -416,6 +416,11 @@ def finish_auth(
         if isinstance(written, Response):
             return written
         google_id, superseded = written
+        if not deps.tokens.holds_locks(locks):
+            # A lease is not a fence: a stall past it lets another finishAuth
+            # write too. The dual-active state this can leave is never used
+            # (contract I6, selection rule) and reconcile repairs it; say so now.
+            logger.error("googleHealth/finishAuth lock lease lost during write")
     finally:
         deps.tokens.release_locks(locks)
 

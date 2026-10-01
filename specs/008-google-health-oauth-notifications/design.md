@@ -66,11 +66,13 @@ Both carry `iss=openwellness-api`, and verification requires `exp`, `iat`, `jti`
 | Key | Set | Purpose |
 |---|---|---|
 | `gh:state:<jti>` | `SET NX EX 900` at authorize | single-use state; finishAuth consumes it with `DEL` |
-| `gh:link:claim:<jti>` | `SET NX EX <remaining link lifetime>` | the only consumed-link marker (I3) |
+| `gh:link:claim:<jti>` | `SET NX PX min(remaining link lifetime, 60000)` with an owner token; committed (owner-checked) to `max(remaining link lifetime, 60000)` just before the insert | the only consumed-link marker (I3) |
 | `gh:lock:pid:<participantId>` | `SET NX PX 60000` | serializes migration per participant (I3) |
 | `gh:lock:hu:<first 32 hex of sha256(healthUserId)>` | `SET NX PX 60000` | serializes migration per Google account (I3) |
 
-`ow_api` runs two uvicorn workers, so none of this state lives in process memory. Locks carry a random owner token and are released by compare-and-delete under `WATCH`, so a request never deletes a lock another request re-took after expiry.
+`ow_api` runs two uvicorn workers, so none of this state lives in process memory. The link claim and the locks carry a random owner token and are renewed, committed and released by compare-and-set or compare-and-delete under `WATCH`, so a request never touches a key another request re-took after expiry. A pending claim lives one lock lease, so a claim whose release failed before the commit frees the link within 60 s.
+
+The lifetimes, scopes and Google endpoints are constants, not settings: no `GOOGLE_HEALTH_*` value can change the link (72 h), state (15 min) or lock (60 s) lifetime, the four scopes, or the OAuth and identity URLs. The OAuth client and the keyset fetch never follow a redirect.
 
 ## finishAuth order
 
@@ -79,19 +81,22 @@ finishAuth is the one route that does credential work inline (the consuming proj
 1. `error` present (consent declined): refuse; nothing claimed, Google not called.
 2. Verify the state and the cookie, then consume the nonce.
 3. Read the participant (active, not held).
-4. Claim the link (`gh:link:claim`). A second state minted from the same link can never exchange a code.
+4. Claim the link (`gh:link:claim`, pending). An expired link cannot be claimed. A second state minted from the same link can never exchange a code.
 5. Exchange the code.
 6. Validate the grant: all four scopes and a refresh token, else refuse and release the claim.
 7. Look up the identity (`healthUserId`, `legacyUserId`).
 8. Take the participant lock, then the account lock; busy answers 409.
 9. Recheck ownership under the account lock: another participant's GOOGLE_ACTIVE record on the same `healthUserId` refuses (I2).
 10. Carry the earliest `migratedAt` of the participant's Google records forward, else now.
-11. Insert the record with `migrationStatus: "pending"`.
-12. Supersede the participant's other ACTIVE records (`supersededAt`, `supersededBy`) in one `update_many` that repeats the ACTIVE filter (I1).
-13. Release the locks.
-14. Publish `googleHealth.completeMigration [participantId, googleRecordId, supersededRecordIds]` onto `scheduler_new`.
+11. Renew both lock leases (owner-checked); a lease lost during the reads answers 409 and writes nothing.
+12. Commit the link claim (owner-checked); a claim lost to another request writes nothing.
+13. Under one `pymongo.timeout` deadline of half a lease (30 s): insert the record with `migrationStatus: "pending"`, then supersede the participant's other ACTIVE records (`supersededAt`, `supersededBy`) in one `update_many` that repeats the ACTIVE filter (I1).
+14. Check both leases are still held; if not, log an ERROR (see below). Release the locks.
+15. Publish `googleHealth.completeMigration [participantId, googleRecordId, supersededRecordIds]` onto `scheduler_new`.
 
-Any failure before step 11 releases the link claim and writes nothing, so the participant can reuse the link. From step 11 on the link stays consumed and the record exists. A supersede failure publishes an empty `supersededRecordIds`, and a publish failure is logged and swallowed: the record stays `pending`.
+Any failure before step 13 releases the link claim and writes nothing, so the participant can reuse the link. An insert the server refuses (`WriteError`) also releases it; if that release fails, the committed claim blocks this link and an ERROR says to mint a new one. Any other insert failure (timeout, dropped connection) may follow a committed write, so the link stays consumed. Once the record exists the link stays consumed. A supersede failure publishes an empty `supersededRecordIds`, and a publish failure is logged and swallowed: the record stays `pending`.
+
+The locks are leases, not fences: a worker paused longer than a lease between step 11 and the write can still write after another request took the locks. Mongo has no uniqueness constraint for I1 or I2 in this phase, because the insert-then-supersede order briefly holds two ACTIVE records by design. The resulting dual-active state is never used (the selection rule picks none of two Google records), is counted by status and repaired by reconcile (I6), and step 14 logs it as it happens.
 
 ### `migrationStatus` and reconcile
 
@@ -113,7 +118,7 @@ The receiver follows the enqueue-and-return rule of spec 007: no Mongo read, no 
 
 1. Bounded raw read, 64 KiB, else 413 (before any credential check, so an oversized body costs nothing).
 2. `hmac.compare_digest` on `Authorization` against `GOOGLE_HEALTH_WEBHOOK_SECRET`, else 401.
-3. `{"type": "verification"}` answers 200 (Google's subscriber handshake).
+3. `{"type": "verification"}` answers 200 with an empty body (Google's subscriber handshake accepts 200 or 201 and reads no body; the secret is never echoed).
 4. The signature over the exact raw bytes, in the threadpool: invalid is 401, unavailable key is 503.
 5. Parse: one object or an array of 1..100 items, else 400. An item that fails validation is dropped with a WARNING count; redelivery cannot fix it, so a signed body whose every item is invalid still answers 204.
 6. Group by (healthUserId, dataType, operation), union the dates, publish one `googleHealth.handleNotification [healthUserId, dataType, operation, dates]` per group onto `scheduler_new`, in the threadpool. Any publish failure answers 503 so Google redelivers the whole request; groups already published are coalesced downstream by the scheduler's `QueueOnce` on `syncDate`.

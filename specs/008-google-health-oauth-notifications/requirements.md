@@ -39,7 +39,7 @@ As an operator, I want `ow_api` to accept Google's data-change notifications, so
 
 **Acceptance criteria**
 
-- WHEN Google sends the subscriber handshake `{"type": "verification"}` THE system SHALL answer 200 with the configured `Authorization` secret and 401 without it.
+- WHEN Google sends the subscriber handshake `{"type": "verification"}` with the configured `Authorization` header THE system SHALL answer 200 with an empty body (Google accepts 200 or 201 and reads no body), and WHEN the header is missing or wrong THE system SHALL answer 401. The secret is never echoed in a response.
 - WHEN a notification arrives THE system SHALL verify `GOOGLE-HEALTH-API-SIGNATURE` over the raw body, and answer 401 for an invalid signature and 503 when the signing key cannot be obtained, so that Google redelivers.
 - WHEN a signed body holds one notification or an array of them THE system SHALL publish one `googleHealth.handleNotification [healthUserId, dataType, operation, dates]` per distinct (healthUserId, dataType, operation) onto `scheduler_new` and answer 204.
 - WHEN an interval is given as `civilDateTimeInterval`, `civilIso8601TimeInterval` or `physicalTimeInterval` THE system SHALL derive the civil dates it covers.
