@@ -12,6 +12,9 @@ import logging
 
 import pytest
 
+from openwellness_api.deps.principal import Principal
+from openwellness_api.google_health.settings import DEFAULT_SCOPES, GoogleHealthSettings
+
 from .google_health_harness import (
     API_JWT_SECRET,
     AUTHORIZE_PATH,
@@ -134,3 +137,18 @@ def test_unset_keys_disable_the_routes_and_name_the_keys(
     assert "GOOGLE_HEALTH_CLIENT_SECRET" in warning.getMessage()
     assert "GOOGLE_HEALTH_WEBHOOK_SECRET" in warning.getMessage()
     assert _all_routes(h) == [503, 503, 503]
+
+
+def test_the_scopes_cannot_be_widened_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GOOGLE_HEALTH_SCOPES", '["https://www.googleapis.com/auth/drive"]')
+    assert GoogleHealthSettings().scopes == DEFAULT_SCOPES
+    assert make_settings(scopes=("https://www.googleapis.com/auth/drive",)).scopes == DEFAULT_SCOPES
+
+
+def test_a_disabled_links_route_is_503_before_authentication() -> None:
+    h = Harness(settings=make_settings(client_secret=""))
+    h.principal = Principal(id="anonymous", is_authenticated=False)
+    resp = h.client().post(LINKS_PATH, json={"participantId": h.seed_participant()})
+    assert resp.status_code == 503

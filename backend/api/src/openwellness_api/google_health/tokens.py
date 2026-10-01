@@ -12,6 +12,9 @@ browser binding" and invariant I3.
   ``exp`` (``lnk``, ``lx``), so finishAuth can claim the link.
 - The **link claim** ``gh:link:claim:<jti>`` is taken before the code
   exchange and kept after the insert: it is the only consumed-link marker.
+  It holds a per-request owner token. Until :meth:`commit_link` it lives
+  only ``lock_ttl_ms``, so a claim whose release failed frees the link soon;
+  the commit, just before the insert, extends it to the link's expiry.
 
 ``ow_api`` runs two uvicorn workers, so nothing lives in process memory.
 Neither secret is the API's access-token secret; the ``aud`` values stop one
@@ -83,6 +86,14 @@ class StateClaims:
     jti: str
     link_jti: str
     link_exp: int
+
+
+@dataclass(frozen=True)
+class LinkClaim:
+    """This request's hold on ``gh:link:claim:<jti>`` (I3)."""
+
+    key: str
+    token: str = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -193,20 +204,51 @@ class GoogleHealthTokens:
 
     # --- link claim (I3) --------------------------------------------------
 
-    def claim_link(self, jti: str, exp: int) -> bool:
-        """Take the link for this completion. ``False`` when already claimed."""
-        ttl = max(1, exp - self._now())
+    def claim_link(self, jti: str, exp: int) -> LinkClaim | None:
+        """Take the link for this completion, pending until :meth:`commit_link`.
+
+        ``None`` when the link has expired or is already claimed.
+        """
+        remaining_ms = (exp - self._now()) * 1000
+        if remaining_ms <= 0:
+            return None
+        claim = LinkClaim(key=LINK_CLAIM_KEY.format(jti=jti), token=secrets.token_urlsafe(16))
+        ttl_ms = min(remaining_ms, self._settings.lock_ttl_ms)
         try:
-            return bool(self._redis.set(LINK_CLAIM_KEY.format(jti=jti), "1", nx=True, ex=ttl))
+            taken = self._redis.set(claim.key, claim.token, nx=True, px=ttl_ms)
+        except Exception as exc:
+            raise TokenStoreError() from exc
+        return claim if taken else None
+
+    def commit_link(self, claim: LinkClaim, exp: int) -> bool:
+        """Keep the claim until the link expires. ``False`` when it is no longer ours.
+
+        Called just before the insert: a pending claim that expired and was
+        taken by another request must not let this one write a record.
+        """
+        remaining_ms = (exp - self._now()) * 1000
+        if remaining_ms <= 0:
+            return False
+        try:
+            with self._redis.pipeline() as pipe:
+                pipe.watch(claim.key)
+                if not _owned(pipe.get(claim.key), claim.token):
+                    pipe.unwatch()
+                    return False
+                pipe.multi()
+                pipe.set(claim.key, claim.token, px=remaining_ms)
+                pipe.execute()
+                return True
         except Exception as exc:
             raise TokenStoreError() from exc
 
-    def release_link(self, jti: str) -> None:
-        """Give the link back after a failure before the insert. Best effort."""
-        try:
-            self._redis.delete(LINK_CLAIM_KEY.format(jti=jti))
-        except Exception:
-            pass
+    def release_link(self, claim: LinkClaim) -> bool:
+        """Give the link back after a failure before the insert.
+
+        Only this request's claim is deleted. ``False`` when Redis failed: a
+        pending claim then frees the link within ``lock_ttl_ms``.
+        """
+        return self._release_owned(claim.key, claim.token)
 
     def is_link_claimed(self, jti: str) -> bool:
         try:
@@ -245,22 +287,22 @@ class GoogleHealthTokens:
         for key in locks.keys:
             self._release_owned(key, locks.token)
 
-    def _release_owned(self, key: str, token: str) -> None:
-        """Compare-and-delete under ``WATCH``; a lock that expired and was
-        re-taken by another request is left alone. Best effort: an
-        unreleased lock expires after ``lock_ttl_ms``."""
+    def _release_owned(self, key: str, token: str) -> bool:
+        """Compare-and-delete under ``WATCH``; a key that expired and was
+        re-taken by another request is left alone. ``False`` only when Redis
+        failed: an unreleased key expires after ``lock_ttl_ms``."""
         try:
             with self._redis.pipeline() as pipe:
                 pipe.watch(key)
-                current = pipe.get(key)
-                if current in (token, token.encode("ascii")):
+                if _owned(pipe.get(key), token):
                     pipe.multi()
                     pipe.delete(key)
                     pipe.execute()
                 else:
                     pipe.unwatch()
         except Exception:
-            pass
+            return False
+        return True
 
     # --- helpers ----------------------------------------------------------
 
@@ -278,6 +320,10 @@ class GoogleHealthTokens:
             )
         except Exception as exc:
             raise TokenInvalid() from exc
+
+
+def _owned(current: Any, token: str) -> bool:
+    return current in (token, token.encode("ascii"))
 
 
 def _str_claim(claims: dict[str, Any], name: str) -> str:

@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Annotated, Any, Final
 
 from bson.errors import InvalidId
+from pymongo.errors import WriteError
 from fastapi import Depends, Query, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -41,7 +42,7 @@ from .google_client import GoogleOAuthClient, GoogleOAuthError, TokenGrant
 from .settings import GoogleHealthSettings
 from .signature import SignatureVerifier
 from .store import GoogleHealthStore
-from .tokens import GoogleHealthTokenError, GoogleHealthTokens
+from .tokens import GoogleHealthTokenError, GoogleHealthTokens, LinkClaim
 
 logger = logging.getLogger(__name__)
 
@@ -290,7 +291,6 @@ def finish_auth(
         return _error()
 
     pid = claims.participant_id
-    link_jti = claims.link_jti
     try:
         participant = _participant(deps, pid)
     except Exception as exc:
@@ -306,19 +306,19 @@ def finish_auth(
     # I3: the link is claimed before the code is exchanged, so a second state
     # minted from the same link can never exchange a code.
     try:
-        claimed = deps.tokens.claim_link(link_jti, claims.link_exp)
+        link_claim = deps.tokens.claim_link(claims.link_jti, claims.link_exp)
     except GoogleHealthTokenError as exc:
         logger.error("googleHealth/finishAuth link claim failed: %s", type(exc).__name__)
         return _error(500)
-    if not claimed:
-        logger.warning("googleHealth/finishAuth refused: link already used")
+    if link_claim is None:
+        logger.warning("googleHealth/finishAuth refused: link already used or expired")
         return _error()
 
     try:
         grant = deps.google.exchange_code(code)
     except GoogleOAuthError as exc:
         logger.warning("googleHealth/finishAuth google failed: %s", exc.kind)
-        deps.tokens.release_link(link_jti)
+        _release_link(deps, link_claim)
         return _error()
 
     missing_scope = set(deps.settings.scopes) - set(grant.scope.split())
@@ -328,20 +328,20 @@ def finish_auth(
         # with every permission.
         logger.warning("googleHealth/finishAuth rejected grant: incomplete")
         _revoke_rejected_grant(deps, grant)
-        deps.tokens.release_link(link_jti)
+        _release_link(deps, link_claim)
         return _error()
 
     try:
         identity = deps.google.get_identity(grant.access_token)
     except GoogleOAuthError as exc:
         logger.warning("googleHealth/finishAuth google failed: %s", exc.kind)
-        deps.tokens.release_link(link_jti)
+        _release_link(deps, link_claim)
         return _error()
 
     locks = deps.tokens.acquire_locks(pid, identity.health_user_id)
     if locks is None:
         logger.warning("googleHealth/finishAuth busy")
-        deps.tokens.release_link(link_jti)
+        _release_link(deps, link_claim)
         return _busy()
 
     superseded: list[str] = []
@@ -353,11 +353,30 @@ def finish_auth(
             owner = deps.store.active_google_owner_of(identity.health_user_id)
             if owner is not None and owner != pid:
                 logger.warning("googleHealth/finishAuth refused: account connected elsewhere")
-                deps.tokens.release_link(link_jti)
+                _release_link(deps, link_claim)
                 return _error()
             legacy_owners = deps.store.legacy_owner_ids(pid)
             now = int(deps.clock())
             migrated_at = deps.store.carried_migrated_at(pid) or now
+        except Exception as exc:
+            # Nothing was written: the link can be retried.
+            logger.error("googleHealth/finishAuth store failed: %s", type(exc).__name__)
+            _release_link(deps, link_claim)
+            return _error(500)
+
+        # The claim must outlive any insert, so it is kept for the link's
+        # lifetime first; a pending claim lost to another request writes nothing.
+        try:
+            committed = deps.tokens.commit_link(link_claim, claims.link_exp)
+        except GoogleHealthTokenError as exc:
+            logger.error("googleHealth/finishAuth link commit failed: %s", type(exc).__name__)
+            _release_link(deps, link_claim)
+            return _error(500)
+        if not committed:
+            logger.warning("googleHealth/finishAuth refused: link claim lost")
+            return _error()
+
+        try:
             google_id = deps.store.insert_google_record(
                 {
                     "participantId": pid,
@@ -373,10 +392,17 @@ def finish_auth(
                     "migrationStatus": "pending",
                 }
             )
-        except Exception as exc:
-            # Nothing was written: the link can be retried.
+        except WriteError as exc:
+            # The server refused the insert: nothing was written, so the link
+            # can be retried.
             logger.error("googleHealth/finishAuth store failed: %s", type(exc).__name__)
-            deps.tokens.release_link(link_jti)
+            _release_link(deps, link_claim)
+            return _error(500)
+        except Exception as exc:
+            # A timeout or dropped connection may follow a committed insert.
+            # The link stays consumed so a retry cannot write a second record;
+            # staff mint a new link if none was written.
+            logger.error("googleHealth/finishAuth store outcome unknown: %s", type(exc).__name__)
             return _error(500)
 
         # From here the record exists and stays ``pending`` until the
@@ -395,6 +421,13 @@ def finish_auth(
     _publish_complete_migration(deps, pid, google_id, superseded)
     logger.info("googleHealth/finishAuth connected")
     return _success()
+
+
+def _release_link(deps: GoogleHealthDeps, claim: LinkClaim) -> None:
+    if not deps.tokens.release_link(claim):
+        # The pending claim expires within ``lock_ttl_ms``; the link is
+        # usable again after that.
+        logger.warning("googleHealth/finishAuth link release failed")
 
 
 def _success() -> Response:

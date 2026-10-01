@@ -10,6 +10,7 @@ supersedes, releases the locks and publishes. So:
 - no interleaving of links, states, participants or Google accounts yields
   two active Google records for a participant or an account;
 - every failure before the insert writes nothing and gives the link back;
+- an insert whose outcome is unknown keeps the link consumed;
 - every failure after the insert leaves a ``pending`` record the scheduler's
   reconcile re-drives;
 - the locks are released on every path.
@@ -25,6 +26,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from pymongo.errors import AutoReconnect, WriteError
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from openwellness_api.google_health.oauth import BUSY_PAGE, ERROR_PAGE, SUCCESS_PAGE
@@ -383,7 +385,8 @@ def test_redis_error_taking_a_lock_answers_busy_and_gives_the_link_back(
 
 
 @pytest.mark.parametrize(
-    "step", ["participant", "active_google_owner_of", "carried_migrated_at", "insert_google_record"]
+    "step",
+    ["participant", "active_google_owner_of", "legacy_owner_ids", "carried_migrated_at", "insert_google_record"],
 )
 def test_mongo_error_before_the_insert_writes_nothing_and_gives_the_link_back(
     h: Harness, step: str
@@ -401,6 +404,13 @@ def test_mongo_error_before_the_insert_writes_nothing_and_gives_the_link_back(
                 raise RuntimeError("injected mongo failure")
 
         _swap(h, participants=BrokenParticipants())
+    elif step == "insert_google_record":
+
+        def refused() -> None:
+            # The server answered: nothing was written.
+            raise WriteError("injected write error", code=121)
+
+        _swap(h, store=HookedStore(h.deps.store, {step: refused}))
     else:
         _swap(h, store=HookedStore(h.deps.store, {step: _raise}))
 
@@ -412,6 +422,28 @@ def test_mongo_error_before_the_insert_writes_nothing_and_gives_the_link_back(
     assert h.db["fitbits"].count_documents({}) == 1 and legacy
     assert h.publisher.calls == []
     assert _claims(h) == [] and _lock_keys(h) == []
+
+
+@pytest.mark.parametrize("error", [AutoReconnect("injected"), RuntimeError("injected")])
+def test_an_insert_with_an_unknown_outcome_keeps_the_link_consumed(
+    h: Harness, error: Exception
+) -> None:
+    pid = h.seed_participant()
+    client, state, cookie = _prepared(h, pid, "c1")
+
+    def ambiguous() -> None:
+        raise error
+
+    _swap(h, store=HookedStore(h.deps.store, {"insert_google_record": ambiguous}))
+    resp = h.finish(client, code="c1", state=state, cookie=cookie)
+
+    assert _is_error(resp) and resp.status_code == 500
+    assert h.publisher.calls == []
+    # The insert may have committed: a retry with the same link must not
+    # write a second record.
+    (claim,) = _claims(h)
+    assert h.redis.ttl(claim) > h.settings.lock_ttl_ms // 1000
+    assert _lock_keys(h) == []
 
 
 def test_mongo_error_superseding_after_the_insert_still_publishes(
@@ -492,3 +524,86 @@ def test_the_account_lock_key_never_carries_the_google_user_id(h: Harness) -> No
     assert all("HEALTH-USER-SENTINEL" not in key for key in h.redis.keys("*"))
     h.deps.tokens.release_locks(locks)
     assert _lock_keys(h) == []
+
+
+# --- the link claim itself ------------------------------------------------------------
+
+
+def _now(h: Harness) -> int:
+    return int(h.deps.tokens._clock())
+
+
+def test_an_expired_link_cannot_be_claimed(h: Harness) -> None:
+    tokens = h.deps.tokens
+    assert tokens.claim_link("J1", _now(h)) is None
+    assert tokens.claim_link("J1", _now(h) - 5) is None
+    assert _claims(h) == []
+
+
+def test_a_pending_claim_lives_only_the_lock_ttl_until_committed(h: Harness) -> None:
+    tokens = h.deps.tokens
+    exp = _now(h) + h.settings.link_ttl_seconds
+    claim = tokens.claim_link("J1", exp)
+    assert claim is not None
+    assert 0 < h.redis.pttl(claim.key) <= h.settings.lock_ttl_ms
+    assert tokens.claim_link("J1", exp) is None
+
+    assert tokens.commit_link(claim, exp)
+    assert h.redis.ttl(claim.key) > h.settings.lock_ttl_ms // 1000
+
+
+def test_a_claim_is_released_and_committed_only_by_its_owner(h: Harness) -> None:
+    tokens = h.deps.tokens
+    exp = _now(h) + h.settings.link_ttl_seconds
+    claim = tokens.claim_link("J1", exp)
+    assert claim is not None
+
+    # Ours expired and another request claimed the link.
+    h.redis.set(claim.key, "another-owner", px=60000)
+    assert tokens.release_link(claim)
+    assert h.redis.get(claim.key) == "another-owner"
+    assert not tokens.commit_link(claim, exp)
+    assert 0 < h.redis.pttl(claim.key) <= 60000
+
+
+def test_a_lost_claim_writes_no_record(h: Harness) -> None:
+    pid = h.seed_participant()
+    client, state, cookie = _prepared(h, pid, "c1")
+
+    def steal() -> None:
+        # The pending claim expired mid-flow and another request took it.
+        (key,) = _claims(h)
+        h.redis.set(key, "another-owner", px=60000)
+
+    _swap(h, store=HookedStore(h.deps.store, {"carried_migrated_at": steal}))
+    resp = h.finish(client, code="c1", state=state, cookie=cookie)
+
+    assert _is_error(resp)
+    assert h.google_records() == []
+    assert h.publisher.calls == []
+    (key,) = _claims(h)
+    assert h.redis.get(key) == "another-owner"
+    assert _lock_keys(h) == []
+
+
+def test_a_failed_release_is_logged_and_the_pending_claim_expires(
+    h: Harness, caplog: pytest.LogCaptureFixture
+) -> None:
+    pid = h.seed_participant()
+    client, state, cookie = _prepared(h, pid, "c1")
+    h.google.fail_identity = True
+
+    def broken_pipeline(*args: Any, **kwargs: Any) -> Any:
+        raise RedisConnectionError("injected")
+
+    faulty = FaultyRedis(h.redis, set())
+    faulty.pipeline = broken_pipeline  # type: ignore[method-assign]
+    _swap(h, tokens=GoogleHealthTokens(h.settings, faulty))
+
+    with caplog.at_level(logging.WARNING):
+        resp = h.finish(client, code="c1", state=state, cookie=cookie)
+
+    assert _is_error(resp)
+    assert "googleHealth/finishAuth link release failed" in caplog.text
+    (key,) = _claims(h)
+    assert 0 < h.redis.pttl(key) <= h.settings.lock_ttl_ms

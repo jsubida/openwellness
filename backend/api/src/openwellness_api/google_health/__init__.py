@@ -3,7 +3,9 @@
 Four routes, all under the edge group ``/api/googleHealth`` (D-05):
 
 - ``POST /api/googleHealth/links``: staff mint a participant-bound link.
-  Router-level ``require_write_principal`` plus the ``admin`` role.
+  Router-level ``require_write_principal`` plus the ``admin`` role, behind
+  :func:`require_google_health_enabled` so a disabled route answers 503
+  before authentication.
 - ``GET /api/googleHealth/authorize`` and ``GET /api/googleHealth/finishAuth``:
   the participant's browser, unauthenticated by design. Each carries the
   ``x-allow-unauthenticated`` marker; the link and state tokens are their
@@ -23,10 +25,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import AuthSettings
 from ..deps.principal import ALLOW_UNAUTHENTICATED, require_write_principal
+from ..errors.responses import build_error
 from ..event_handlers.celery_producer import CeleryTaskPublisher, ProducerSettings
 from ..event_handlers.mongo_readers import MongoParticipantReader
 from ..event_handlers.ports import TaskPublisher
@@ -58,8 +61,20 @@ __all__ = [
 ]
 
 
+def require_google_health_enabled(request: Request) -> None:
+    """503 while the settings are unset or invalid, ahead of authentication."""
+    deps = get_google_health_deps(request)
+    if deps is None or deps.disabled:
+        raise HTTPException(
+            status_code=503,
+            detail=build_error(503, "UNAVAILABLE", "Google Health is not available."),
+        )
+
+
 def build_google_health_router() -> APIRouter:
-    staff = APIRouter(dependencies=[Depends(require_write_principal)])
+    staff = APIRouter(
+        dependencies=[Depends(require_google_health_enabled), Depends(require_write_principal)]
+    )
     staff.add_api_route(LINKS_PATH, create_link, methods=["POST"], include_in_schema=False)
 
     browser = APIRouter()

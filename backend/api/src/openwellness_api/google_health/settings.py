@@ -57,7 +57,6 @@ class GoogleHealthSettings(BaseSettings):
     link_ttl_seconds: int = 259200
     state_ttl_seconds: int = 900
     lock_ttl_ms: int = 60000
-    scopes: tuple[str, ...] = DEFAULT_SCOPES
 
     authorize_endpoint: str = "https://accounts.google.com/o/oauth2/v2/auth"
     token_endpoint: str = "https://oauth2.googleapis.com/token"
@@ -67,6 +66,11 @@ class GoogleHealthSettings(BaseSettings):
         "https://www.gstatic.com/googlehealthapi/webhooks/webhooks_public_keyset.json"
     )
     """Google's webhook signing keyset (``GOOGLE_HEALTH_KEYSET_URL``); public keys only."""
+
+    @property
+    def scopes(self) -> tuple[str, ...]:
+        """The locked scopes. Not a field, so no ``GOOGLE_HEALTH_SCOPES`` can widen them."""
+        return DEFAULT_SCOPES
 
     def redirect_uri(self) -> str:
         """The registered OAuth redirect URI (contract "Origins")."""
