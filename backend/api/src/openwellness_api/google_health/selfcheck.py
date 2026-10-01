@@ -131,16 +131,23 @@ def _run(name: str, check: Callable[[], None]) -> bool:
 def main(redis_client: Any = None) -> int:
     """Run every check; 0 when all pass, else 1. ``redis_client`` is for tests."""
     settings = GoogleHealthSettings()
-    if redis_client is None:
-        from ..deps.auth_container import _make_redis_client
+    clients: list[Any] = [] if redis_client is None else [redis_client]
 
-        redis_client = _make_redis_client(RedisSettings())
+    def redis() -> Any:
+        # Built inside the Redis checks, so a malformed ``REDIS_URL`` fails
+        # them by class name and every check still prints its line.
+        if not clients:
+            from ..deps.auth_container import _make_redis_client
+
+            clients.append(_make_redis_client(RedisSettings()))
+        return clients[0]
+
     checks: dict[str, Callable[[], None]] = {
         "settings": lambda: _check_settings(settings),
         "signature_vector": _check_signature_vector,
         "keyset_snapshot": _check_keyset_snapshot,
-        "token_roundtrip": lambda: _check_token_roundtrip(settings, redis_client),
-        "redis_ping": lambda: _check_redis_ping(redis_client),
+        "token_roundtrip": lambda: _check_token_roundtrip(settings, redis()),
+        "redis_ping": lambda: _check_redis_ping(redis()),
         "publisher_config": _check_publisher_config,
     }
     results = [_run(name, checks[name]) for name in CHECKS]

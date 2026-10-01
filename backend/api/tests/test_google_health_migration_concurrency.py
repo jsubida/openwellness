@@ -353,10 +353,19 @@ def test_redis_error_consuming_the_nonce_writes_nothing(h: Harness) -> None:
     client, state, cookie = _prepared(h, pid, "c1")
     _faulty_tokens(h, {("delete", "gh:state:")})
     resp = h.finish(client, code="c1", state=state, cookie=cookie)
-    assert _is_error(resp)
+    assert _is_error(resp) and resp.status_code == 500
     assert h.google.exchanges == []
     assert h.google_records() == []
     assert _claims(h) == [] and _lock_keys(h) == []
+
+
+def test_redis_error_minting_the_state_is_a_500_not_a_bad_link(h: Harness) -> None:
+    pid = h.seed_participant()
+    client = h.client()
+    url = h.mint_link(client, pid)
+    _faulty_tokens(h, {("set", "gh:state:")})
+    resp = client.get(url, follow_redirects=False)
+    assert _is_error(resp) and resp.status_code == 500
 
 
 def test_redis_error_claiming_the_link_exchanges_nothing(h: Harness) -> None:
@@ -644,16 +653,21 @@ def test_a_lock_lease_lost_before_the_insert_writes_nothing(h: Harness) -> None:
     assert h.redis.get(f"gh:lock:pid:{pid}") is None
 
 
-def test_the_insert_and_supersede_are_bounded_inside_the_lease(h: Harness) -> None:
+def test_the_insert_and_supersede_share_one_deadline_inside_the_lease(h: Harness) -> None:
     from pymongo import _csot
 
     pid = h.seed_participant()
     h.seed_legacy(pid)
     client, state, cookie = _prepared(h, pid, "c1")
     budgets: dict[str, Any] = {}
+    deadlines: dict[str, Any] = {}
 
     def record(name: str) -> Callable[[], None]:
-        return lambda: budgets.__setitem__(name, _csot.get_timeout())
+        def hook() -> None:
+            budgets[name] = _csot.get_timeout()
+            deadlines[name] = _csot.get_deadline()
+
+        return hook
 
     _swap(
         h,
@@ -673,3 +687,32 @@ def test_the_insert_and_supersede_are_bounded_inside_the_lease(h: Harness) -> No
     for name in ("insert", "supersede"):
         assert 0 < budgets[name] <= h.settings.store_write_budget_seconds
         assert budgets[name] * 1000 < h.settings.lock_ttl_ms
+    # One deadline for both writes, not a fresh budget per write.
+    assert deadlines["insert"] == deadlines["supersede"]
+
+
+def test_a_claim_committed_near_link_expiry_outlives_the_writes(h: Harness) -> None:
+    tokens = h.deps.tokens
+    exp = _now(h) + 2
+    claim = tokens.claim_link("J1", exp)
+    assert claim is not None
+    assert tokens.commit_link(claim, exp)
+    assert h.redis.pttl(claim.key) > h.settings.store_write_budget_seconds * 1000
+
+
+def test_a_lease_lost_before_commit_leaves_only_a_pending_claim(h: Harness) -> None:
+    pid = h.seed_participant()
+    client, state, cookie = _prepared(h, pid, "c1")
+
+    def stall_past_the_lease() -> None:
+        h.redis.set(_hu_key("H1"), "another-owner", px=60000)
+
+    _swap(h, store=HookedStore(h.deps.store, {"carried_migrated_at": stall_past_the_lease}))
+    # The release fails too: the claim left behind must still be the short one.
+    h.deps.tokens.release_link = lambda claim: False  # type: ignore[method-assign]
+    resp = h.finish(client, code="c1", state=state, cookie=cookie)
+
+    assert _is_busy(resp)
+    assert h.google_records() == []
+    (key,) = _claims(h)
+    assert 0 < h.redis.pttl(key) <= h.settings.lock_ttl_ms

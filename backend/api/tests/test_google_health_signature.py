@@ -544,3 +544,19 @@ def test_selfcheck_runs_as_a_module_and_reports_unset_settings_by_name() -> None
         "redis_ping",
         "publisher_config",
     ]
+
+
+def test_a_malformed_redis_url_fails_the_redis_checks_and_still_prints_every_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _selfcheck_env(monkeypatch, REDIS_URL="bogus://secret-host:6379/0")
+    out = io.StringIO()
+    with redirect_stdout(out):
+        code = selfcheck.main()
+    lines = out.getvalue().splitlines()
+    assert code == 1
+    assert [line.split(" ")[1].rstrip(":") for line in lines] == list(selfcheck.CHECKS)
+    assert lines[3].startswith("FAIL token_roundtrip: ")
+    assert lines[4].startswith("FAIL redis_ping: ")
+    assert lines[0] == "PASS settings"
+    assert "secret-host" not in out.getvalue()

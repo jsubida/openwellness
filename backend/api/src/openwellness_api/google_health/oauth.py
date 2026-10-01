@@ -43,7 +43,7 @@ from .google_client import GoogleOAuthClient, GoogleOAuthError, TokenGrant
 from .settings import GoogleHealthSettings
 from .signature import SignatureVerifier
 from .store import GoogleHealthStore
-from .tokens import GoogleHealthTokenError, GoogleHealthTokens, LinkClaim
+from .tokens import GoogleHealthTokenError, GoogleHealthTokens, LinkClaim, TokenStoreError
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +226,10 @@ def authorize(request: Request, t: Annotated[str | None, Query()] = None) -> Res
         state = deps.tokens.mint_state(
             link.participant_id, link.jti, link.exp, browser_hash(cookie)
         )
+    except TokenStoreError as exc:
+        # Redis is down, not the link: an infrastructure failure.
+        logger.error("googleHealth/authorize failed: %s", type(exc).__name__)
+        return _error(500)
     except GoogleHealthTokenError as exc:
         logger.warning("googleHealth/authorize refused: %s", type(exc).__name__)
         return _error()
@@ -287,6 +291,9 @@ def finish_auth(
     cookie = request.cookies.get(COOKIE_NAME) or ""
     try:
         claims = deps.tokens.consume_state(state, browser_hash(cookie))
+    except TokenStoreError as exc:
+        logger.error("googleHealth/finishAuth state store failed: %s", type(exc).__name__)
+        return _error(500)
     except GoogleHealthTokenError as exc:
         logger.warning("googleHealth/finishAuth refused: %s", type(exc).__name__)
         return _error()
@@ -365,8 +372,17 @@ def finish_auth(
             _release_link(deps, link_claim)
             return _error(500)
 
-        # The claim must outlive any insert, so it is kept for the link's
-        # lifetime first; a pending claim lost to another request writes nothing.
+        # The locks are leases: the reads above may have outlived them. Renew
+        # both (owner-checked) while the link claim is still pending, so a
+        # failure here leaves only a short-lived claim behind.
+        if not deps.tokens.renew_locks(locks):
+            logger.warning("googleHealth/finishAuth busy: lock lease lost")
+            _release_link(deps, link_claim)
+            return _busy()
+
+        # Last step before writing: keep the claim for the link's lifetime
+        # (at least one lease); a pending claim lost to another request
+        # writes nothing.
         try:
             committed = deps.tokens.commit_link(link_claim, claims.link_exp)
         except GoogleHealthTokenError as exc:
@@ -377,52 +393,29 @@ def finish_auth(
             logger.warning("googleHealth/finishAuth refused: link claim lost")
             return _error()
 
-        # The locks are leases: the reads above may have outlived them. Renew
-        # both (owner-checked) right before writing, then bound the writes so
-        # they finish, or fail, well before the renewed leases lapse.
-        if not deps.tokens.renew_locks(locks):
-            logger.warning("googleHealth/finishAuth busy: lock lease lost")
-            _release_link(deps, link_claim)
-            return _busy()
-        write_budget = deps.settings.store_write_budget_seconds
-
-        try:
-            with pymongo.timeout(write_budget):
-                google_id = deps.store.insert_google_record(
-                    {
-                        "participantId": pid,
-                        "provider": PROVIDER_GOOGLE_HEALTH,
-                        "accessToken": grant.access_token,
-                        "refreshToken": grant.refresh_token,
-                        "expiresAt": now + grant.expires_in,
-                        "scope": grant.scope,
-                        "healthUserId": identity.health_user_id,
-                        "legacyUserId": identity.legacy_user_id,
-                        "timeCreated": now,
-                        "migratedAt": migrated_at,
-                        "migrationStatus": "pending",
-                    }
-                )
-        except WriteError as exc:
-            # The server refused the insert: nothing was written, so the link
-            # can be retried.
-            logger.error("googleHealth/finishAuth store failed: %s", type(exc).__name__)
-            _release_link(deps, link_claim)
-            return _error(500)
-        except Exception as exc:
-            # A timeout or dropped connection may follow a committed insert.
-            # The link stays consumed so a retry cannot write a second record;
-            # staff mint a new link if none was written.
-            logger.error("googleHealth/finishAuth store outcome unknown: %s", type(exc).__name__)
-            return _error(500)
-
-        # From here the record exists and stays ``pending`` until the
-        # scheduler's completeMigration runs (I5); the link stays consumed.
-        try:
-            with pymongo.timeout(write_budget):
-                superseded = deps.store.supersede_active(pid, google_id, now)
-        except Exception as exc:
-            logger.error("googleHealth/finishAuth supersede failed: %s", type(exc).__name__)
+        # One deadline covers the insert and the supersede together, so both
+        # finish, or fail, well before the renewed leases lapse.
+        with pymongo.timeout(deps.settings.store_write_budget_seconds):
+            written = _write_google_record(
+                deps,
+                link_claim,
+                {
+                    "participantId": pid,
+                    "provider": PROVIDER_GOOGLE_HEALTH,
+                    "accessToken": grant.access_token,
+                    "refreshToken": grant.refresh_token,
+                    "expiresAt": now + grant.expires_in,
+                    "scope": grant.scope,
+                    "healthUserId": identity.health_user_id,
+                    "legacyUserId": identity.legacy_user_id,
+                    "timeCreated": now,
+                    "migratedAt": migrated_at,
+                    "migrationStatus": "pending",
+                },
+            )
+        if isinstance(written, Response):
+            return written
+        google_id, superseded = written
     finally:
         deps.tokens.release_locks(locks)
 
@@ -433,6 +426,39 @@ def finish_auth(
     _publish_complete_migration(deps, pid, google_id, superseded)
     logger.info("googleHealth/finishAuth connected")
     return _success()
+
+
+def _write_google_record(
+    deps: GoogleHealthDeps, claim: LinkClaim, doc: dict[str, Any]
+) -> tuple[str, list[str]] | Response:
+    """Insert the record, then supersede the participant's others.
+
+    Runs under the caller's single ``pymongo.timeout`` deadline. Returns the
+    new id and the superseded ids, or the error page when the insert failed.
+    """
+    try:
+        google_id = deps.store.insert_google_record(doc)
+    except WriteError as exc:
+        # The server refused the insert: nothing was written, so the link
+        # can be retried.
+        logger.error("googleHealth/finishAuth store failed: %s", type(exc).__name__)
+        _release_link(deps, claim)
+        return _error(500)
+    except Exception as exc:
+        # A timeout or dropped connection may follow a committed insert.
+        # The link stays consumed so a retry cannot write a second record;
+        # staff mint a new link if none was written.
+        logger.error("googleHealth/finishAuth store outcome unknown: %s", type(exc).__name__)
+        return _error(500)
+
+    # From here the record exists and stays ``pending`` until the
+    # scheduler's completeMigration runs (I5); the link stays consumed.
+    try:
+        superseded = deps.store.supersede_active(doc["participantId"], google_id, doc["timeCreated"])
+    except Exception as exc:
+        logger.error("googleHealth/finishAuth supersede failed: %s", type(exc).__name__)
+        superseded = []
+    return google_id, superseded
 
 
 def _release_link(deps: GoogleHealthDeps, claim: LinkClaim) -> None:

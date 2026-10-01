@@ -224,11 +224,14 @@ class GoogleHealthTokens:
         """Keep the claim until the link expires. ``False`` when it is no longer ours.
 
         Called just before the insert: a pending claim that expired and was
-        taken by another request must not let this one write a record.
+        taken by another request must not let this one write a record. The
+        claim is kept for at least one lock lease, even past the link's
+        expiry, so it cannot lapse while the bounded writes run.
         """
         remaining_ms = (exp - self._now()) * 1000
         if remaining_ms <= 0:
             return False
+        ttl_ms = max(remaining_ms, self._settings.lock_ttl_ms)
         try:
             with self._redis.pipeline() as pipe:
                 pipe.watch(claim.key)
@@ -236,7 +239,7 @@ class GoogleHealthTokens:
                     pipe.unwatch()
                     return False
                 pipe.multi()
-                pipe.set(claim.key, claim.token, px=remaining_ms)
+                pipe.set(claim.key, claim.token, px=ttl_ms)
                 pipe.execute()
                 return True
         except Exception as exc:
