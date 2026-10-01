@@ -51,12 +51,19 @@ class GoogleHealthStore:
         )
         return [str(oid) for oid in ids]
 
-    def active_google_owner_of(self, health_user_id: str) -> str | None:
-        """The participant whose GOOGLE_ACTIVE record holds ``health_user_id`` (I2)."""
-        doc = self._fitbits.find_one(
-            {"healthUserId": health_user_id, **google_active_filter()},
-            {"participantId": 1},
-        )
+    def active_google_owner_of(
+        self, health_user_id: str, *, other_than: str | None = None
+    ) -> str | None:
+        """A participant whose GOOGLE_ACTIVE record holds ``health_user_id`` (I2).
+
+        With ``other_than``, only a different participant counts, so a
+        dual-active state left by a past race (I6) cannot hide another
+        owner behind this participant's own record.
+        """
+        query: dict[str, Any] = {"healthUserId": health_user_id, **google_active_filter()}
+        if other_than is not None:
+            query["participantId"] = {"$ne": other_than}
+        doc = self._fitbits.find_one(query, {"participantId": 1})
         if doc is None:
             return None
         return str(doc.get("participantId"))

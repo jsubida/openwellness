@@ -358,8 +358,8 @@ def finish_auth(
             # I2: under the account lock, no other participant may hold this
             # Google account. The grant is not revoked: the other
             # participant's active record shares it.
-            owner = deps.store.active_google_owner_of(identity.health_user_id)
-            if owner is not None and owner != pid:
+            owner = deps.store.active_google_owner_of(identity.health_user_id, other_than=pid)
+            if owner is not None:
                 logger.warning("googleHealth/finishAuth refused: account connected elsewhere")
                 _release_link(deps, link_claim)
                 return _error()

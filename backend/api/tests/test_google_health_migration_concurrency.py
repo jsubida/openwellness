@@ -774,3 +774,21 @@ def test_a_write_inside_the_lease_reports_nothing(
         resp = h.finish(client, code="c1", state=state, cookie=cookie)
     assert _is_success(resp)
     assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+
+
+def test_another_owner_is_found_even_beside_this_participants_own_record(h: Harness) -> None:
+    pid = h.seed_participant()
+    other = h.seed_participant()
+    # A dual-active state left by a past race: both hold H1.
+    h.seed_google(pid, health_user_id="H1", migrated_at=1)
+    h.seed_google(other, health_user_id="H1", migrated_at=1)
+    assert h.deps.store.active_google_owner_of("H1", other_than=pid) == other
+    assert h.deps.store.active_google_owner_of("H1", other_than=other) == pid
+
+    client, state, cookie = _prepared(h, pid, "c1", health="H1")
+    resp = h.finish(client, code="c1", state=state, cookie=cookie)
+
+    assert _is_error(resp)
+    assert len(h.google_records()) == 2  # nothing new written
+    assert h.publisher.calls == []
+    assert _claims(h) == [] and _lock_keys(h) == []
