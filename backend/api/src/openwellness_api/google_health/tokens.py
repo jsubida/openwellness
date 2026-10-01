@@ -282,6 +282,23 @@ class GoogleHealthTokens:
             return None
         return MigrationLocks(keys=(pid_key, hu_key), token=token)
 
+    def renew_locks(self, locks: MigrationLocks) -> bool:
+        """Restart both leases at ``lock_ttl_ms``, only while each still holds
+        this request's token. ``False`` when either was lost or Redis failed."""
+        ttl_ms = self._settings.lock_ttl_ms
+        try:
+            with self._redis.pipeline() as pipe:
+                pipe.watch(*locks.keys)
+                if not all(_owned(pipe.get(key), locks.token) for key in locks.keys):
+                    pipe.unwatch()
+                    return False
+                pipe.multi()
+                for key in locks.keys:
+                    pipe.pexpire(key, ttl_ms)
+                return all(pipe.execute())
+        except Exception:
+            return False
+
     def release_locks(self, locks: MigrationLocks) -> None:
         """Delete each lock key only while it still holds this request's token."""
         for key in locks.keys:

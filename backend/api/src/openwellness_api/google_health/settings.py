@@ -32,6 +32,12 @@ IDENTITY_URL: Final = "https://health.googleapis.com/v4/users/me/identity"
 """Google's OAuth and identity endpoints. Constants, not settings: the code,
 client secret and bearer token they receive must never go elsewhere."""
 
+LINK_TTL_SECONDS: Final = 259200
+STATE_TTL_SECONDS: Final = 900
+LOCK_TTL_MS: Final = 60000
+"""The 72 h link, 15 min state and 60 s migration-lock lifetimes. Constants,
+not settings: no environment value can zero, negate or stretch them."""
+
 FINISH_AUTH_PATH: Final = "/api/googleHealth/finishAuth"
 AUTHORIZE_PATH: Final = "/api/googleHealth/authorize"
 
@@ -61,9 +67,6 @@ class GoogleHealthSettings(BaseSettings):
     public_base_url: str = ""
     migration_hold: str = ""
 
-    link_ttl_seconds: int = 259200
-    state_ttl_seconds: int = 900
-    lock_ttl_ms: int = 60000
 
     keyset_url: str = (
         "https://www.gstatic.com/googlehealthapi/webhooks/webhooks_public_keyset.json"
@@ -74,6 +77,23 @@ class GoogleHealthSettings(BaseSettings):
     def scopes(self) -> tuple[str, ...]:
         """The locked scopes. Not a field, so no ``GOOGLE_HEALTH_SCOPES`` can widen them."""
         return DEFAULT_SCOPES
+
+    @property
+    def link_ttl_seconds(self) -> int:
+        return LINK_TTL_SECONDS
+
+    @property
+    def state_ttl_seconds(self) -> int:
+        return STATE_TTL_SECONDS
+
+    @property
+    def lock_ttl_ms(self) -> int:
+        return LOCK_TTL_MS
+
+    @property
+    def store_write_budget_seconds(self) -> float:
+        """Upper bound on the insert and supersede, well inside one lock lease."""
+        return LOCK_TTL_MS / 2000
 
     @property
     def authorize_endpoint(self) -> str:

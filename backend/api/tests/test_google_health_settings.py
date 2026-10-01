@@ -165,3 +165,14 @@ def test_the_google_endpoints_cannot_be_overridden(monkeypatch: pytest.MonkeyPat
     assert make_settings(token_endpoint="http://attacker.test/x").token_endpoint == (
         "https://oauth2.googleapis.com/token"
     )
+
+
+def test_the_lifetimes_cannot_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GOOGLE_HEALTH_LINK_TTL_SECONDS", "0")
+    monkeypatch.setenv("GOOGLE_HEALTH_STATE_TTL_SECONDS", "-1")
+    monkeypatch.setenv("GOOGLE_HEALTH_LOCK_TTL_MS", "not-a-number")
+    settings = GoogleHealthSettings()  # an invalid value cannot crash startup either
+    assert settings.link_ttl_seconds == 259200
+    assert settings.state_ttl_seconds == 900
+    assert settings.lock_ttl_ms == 60000
+    assert settings.store_write_budget_seconds * 1000 < settings.lock_ttl_ms

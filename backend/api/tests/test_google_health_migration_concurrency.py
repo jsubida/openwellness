@@ -607,3 +607,69 @@ def test_a_failed_release_is_logged_and_the_pending_claim_expires(
     assert "googleHealth/finishAuth link release failed" in caplog.text
     (key,) = _claims(h)
     assert 0 < h.redis.pttl(key) <= h.settings.lock_ttl_ms
+
+
+# --- lock leases around the writes ------------------------------------------------------
+
+
+def test_renewing_the_locks_restarts_only_our_own_leases(h: Harness) -> None:
+    tokens = h.deps.tokens
+    locks = tokens.acquire_locks("P1", "H1")
+    assert locks is not None
+    h.redis.pexpire("gh:lock:pid:P1", 5)
+    assert tokens.renew_locks(locks)
+    assert h.redis.pttl("gh:lock:pid:P1") > 5
+
+    h.redis.set(_hu_key("H1"), "another-owner", px=60000)
+    assert not tokens.renew_locks(locks)
+    assert h.redis.get(_hu_key("H1")) == "another-owner"
+
+
+def test_a_lock_lease_lost_before_the_insert_writes_nothing(h: Harness) -> None:
+    pid = h.seed_participant()
+    client, state, cookie = _prepared(h, pid, "c1")
+
+    def stall_past_the_lease() -> None:
+        # The reads outlived the lease and another request took the account lock.
+        h.redis.set(_hu_key("H1"), "another-owner", px=60000)
+
+    _swap(h, store=HookedStore(h.deps.store, {"carried_migrated_at": stall_past_the_lease}))
+    resp = h.finish(client, code="c1", state=state, cookie=cookie)
+
+    assert _is_busy(resp)
+    assert h.google_records() == []
+    assert h.publisher.calls == []
+    assert _claims(h) == []
+    assert h.redis.get(_hu_key("H1")) == "another-owner"
+    assert h.redis.get(f"gh:lock:pid:{pid}") is None
+
+
+def test_the_insert_and_supersede_are_bounded_inside_the_lease(h: Harness) -> None:
+    from pymongo import _csot
+
+    pid = h.seed_participant()
+    h.seed_legacy(pid)
+    client, state, cookie = _prepared(h, pid, "c1")
+    budgets: dict[str, Any] = {}
+
+    def record(name: str) -> Callable[[], None]:
+        return lambda: budgets.__setitem__(name, _csot.get_timeout())
+
+    _swap(
+        h,
+        store=HookedStore(
+            h.deps.store,
+            {
+                "insert_google_record": record("insert"),
+                "supersede_active": record("supersede"),
+                "carried_migrated_at": record("read"),
+            },
+        ),
+    )
+    resp = h.finish(client, code="c1", state=state, cookie=cookie)
+
+    assert _is_success(resp)
+    assert budgets["read"] is None
+    for name in ("insert", "supersede"):
+        assert 0 < budgets[name] <= h.settings.store_write_budget_seconds
+        assert budgets[name] * 1000 < h.settings.lock_ttl_ms

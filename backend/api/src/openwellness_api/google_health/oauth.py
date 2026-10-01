@@ -28,6 +28,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Final
 
+import pymongo
 from bson.errors import InvalidId
 from pymongo.errors import WriteError
 from fastapi import Depends, Query, Request
@@ -376,22 +377,32 @@ def finish_auth(
             logger.warning("googleHealth/finishAuth refused: link claim lost")
             return _error()
 
+        # The locks are leases: the reads above may have outlived them. Renew
+        # both (owner-checked) right before writing, then bound the writes so
+        # they finish, or fail, well before the renewed leases lapse.
+        if not deps.tokens.renew_locks(locks):
+            logger.warning("googleHealth/finishAuth busy: lock lease lost")
+            _release_link(deps, link_claim)
+            return _busy()
+        write_budget = deps.settings.store_write_budget_seconds
+
         try:
-            google_id = deps.store.insert_google_record(
-                {
-                    "participantId": pid,
-                    "provider": PROVIDER_GOOGLE_HEALTH,
-                    "accessToken": grant.access_token,
-                    "refreshToken": grant.refresh_token,
-                    "expiresAt": now + grant.expires_in,
-                    "scope": grant.scope,
-                    "healthUserId": identity.health_user_id,
-                    "legacyUserId": identity.legacy_user_id,
-                    "timeCreated": now,
-                    "migratedAt": migrated_at,
-                    "migrationStatus": "pending",
-                }
-            )
+            with pymongo.timeout(write_budget):
+                google_id = deps.store.insert_google_record(
+                    {
+                        "participantId": pid,
+                        "provider": PROVIDER_GOOGLE_HEALTH,
+                        "accessToken": grant.access_token,
+                        "refreshToken": grant.refresh_token,
+                        "expiresAt": now + grant.expires_in,
+                        "scope": grant.scope,
+                        "healthUserId": identity.health_user_id,
+                        "legacyUserId": identity.legacy_user_id,
+                        "timeCreated": now,
+                        "migratedAt": migrated_at,
+                        "migrationStatus": "pending",
+                    }
+                )
         except WriteError as exc:
             # The server refused the insert: nothing was written, so the link
             # can be retried.
@@ -408,7 +419,8 @@ def finish_auth(
         # From here the record exists and stays ``pending`` until the
         # scheduler's completeMigration runs (I5); the link stays consumed.
         try:
-            superseded = deps.store.supersede_active(pid, google_id, now)
+            with pymongo.timeout(write_budget):
+                superseded = deps.store.supersede_active(pid, google_id, now)
         except Exception as exc:
             logger.error("googleHealth/finishAuth supersede failed: %s", type(exc).__name__)
     finally:
