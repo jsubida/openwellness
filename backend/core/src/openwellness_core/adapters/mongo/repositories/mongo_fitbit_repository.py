@@ -6,7 +6,12 @@ from ....application.repositories.fitbit_repository import (
     FitbitRepository,
     SomeFitbit,
 )
-from ....domain.models.fitbit import Fitbit
+from ....domain.models.fitbit import (
+    D13_ALIASES,
+    Fitbit,
+    active_filter,
+    select_active,
+)
 from ...interfaces.collection_repository import CollectionRepository
 from ..model.mongo_fitbit import MongoFitbit
 from .mongo_base_repository import MongoBaseRepository
@@ -28,6 +33,27 @@ class MongoFitbitRepository(
         super().__init__(mongo_repo, entity_type, persistence_type)
         self.entity_type: Type[SomeFitbit] = entity_type
 
+    def _to_doc(self, entity: SomeFitbit) -> dict:
+        """Serialize ``entity``, leaving out every D-13 key whose value is None.
+
+        Used by both ``create`` and ``save``. A legacy record loaded and saved
+        through OpenWellness keeps its stored shape: no ``provider: null`` or
+        ``supersededAt: null`` keys appear in a document frame and the
+        scheduler also read.
+        """
+        doc = super()._to_doc(entity)
+        for alias in D13_ALIASES:
+            if doc.get(alias, 0) is None:
+                del doc[alias]
+        return doc
+
     def get_by_participant_id(self, participant_id: str) -> SomeFitbit | None:
-        result = self.get_by_query({"participantId": participant_id})
-        return result[0] if len(result) == 1 else None
+        """The participant's active connection, by the contract's selection rule.
+
+        Queries only ACTIVE records, so a superseded record is never returned;
+        with a superseded legacy record and a Google record, the Google record
+        wins (D-08, D-09). ``get_by_id`` and ``list_all`` stay unfiltered audit
+        reads.
+        """
+        result = self.get_by_query({"participantId": participant_id, **active_filter()})
+        return select_active(result)

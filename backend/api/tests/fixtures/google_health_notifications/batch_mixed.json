@@ -1,0 +1,104 @@
+[
+  {
+    "data": {
+      "version": "1",
+      "clientProvidedSubscriptionName": "subscription-name",
+      "healthUserId": "health-user-id",
+      "operation": "UPSERT",
+      "dataType": "steps",
+      "intervals": [
+        {
+          "physicalTimeInterval": {
+            "startTime": "2026-03-08T01:29:00Z",
+            "endTime": "2026-03-08T01:34:00Z"
+          },
+          "civilDateTimeInterval": {
+            "startDateTime": {
+              "date": {
+                "year": 2026,
+                "month": 3,
+                "day": 7
+              },
+              "time": {
+                "hours": 17,
+                "minutes": 29
+              }
+            },
+            "endDateTime": {
+              "date": {
+                "year": 2026,
+                "month": 3,
+                "day": 7
+              },
+              "time": {
+                "hours": 17,
+                "minutes": 34
+              }
+            }
+          },
+          "civilIso8601TimeInterval": {
+            "startTime": "2026-03-07T17:29:00",
+            "endTime": "2026-03-07T17:34:00"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "data": {
+      "version": "1",
+      "clientProvidedSubscriptionName": "auto-503461148219-lindasubscriber-WEBHOOK_DATA_TYPE_STEPS",
+      "healthUserId": "health-user-id",
+      "operation": "UPSERT",
+      "dataType": "steps",
+      "intervals": [
+        {
+          "civilDateTimeInterval": {
+            "startDateTime": {
+              "date": {
+                "year": 2026,
+                "month": 7,
+                "day": 14
+              },
+              "time": {}
+            },
+            "endDateTime": {
+              "date": {
+                "year": 2026,
+                "month": 7,
+                "day": 15
+              },
+              "time": {}
+            }
+          },
+          "civilIso8601TimeInterval": {
+            "startTime": "2026-07-14T00:00:00",
+            "endTime": "2026-07-15T00:00:00"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "data": {
+      "version": "1",
+      "clientProvidedSubscriptionName": "subscription-name",
+      "healthUserId": "health-user-id",
+      "operation": "DELETE",
+      "dataType": "sleep",
+      "intervals": [
+        {
+          "physicalTimeInterval": {
+            "startTime": "2026-08-12T22:00:00Z",
+            "endTime": "2026-08-13T06:00:00Z"
+          },
+          "civilIso8601TimeInterval": {
+            "startTime": "2026-08-12T22:00:00",
+            "endTime": "2026-08-13T06:00:00"
+          }
+        }
+      ],
+      "recordId": "9875412"
+    }
+  }
+]

@@ -35,6 +35,11 @@ EXPECTED_EXEMPTIONS = {
     # The ActiGraph webhook and handshake (HOOK-02, D-17: frame's trust model).
     "/api/eventHandlers/actigraph",
     "/api/eventHandlers{rest:path}",
+    # The Google Health notification receiver (GHA-02). Google's subscriber
+    # handshake posts once with the configured Authorization secret and once
+    # without it, expecting 401, so the route checks the secret and the
+    # GOOGLE-HEALTH-API-SIGNATURE itself instead of a bearer principal.
+    "/api/googleHealth/notifications",
 }
 
 EVENT_HANDLER_PREFIX = "/api/eventHandlers"

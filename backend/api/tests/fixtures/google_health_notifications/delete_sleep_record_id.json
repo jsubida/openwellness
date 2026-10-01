@@ -1,0 +1,22 @@
+{
+  "data": {
+    "version": "1",
+    "clientProvidedSubscriptionName": "subscription-name",
+    "healthUserId": "health-user-id",
+    "operation": "DELETE",
+    "dataType": "sleep",
+    "intervals": [
+      {
+        "physicalTimeInterval": {
+          "startTime": "2026-08-12T22:00:00Z",
+          "endTime": "2026-08-13T06:00:00Z"
+        },
+        "civilIso8601TimeInterval": {
+          "startTime": "2026-08-12T22:00:00",
+          "endTime": "2026-08-13T06:00:00"
+        }
+      }
+    ],
+    "recordId": "9875412"
+  }
+}

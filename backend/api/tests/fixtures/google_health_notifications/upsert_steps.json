@@ -1,0 +1,45 @@
+{
+  "data": {
+    "version": "1",
+    "clientProvidedSubscriptionName": "subscription-name",
+    "healthUserId": "health-user-id",
+    "operation": "UPSERT",
+    "dataType": "steps",
+    "intervals": [
+      {
+        "physicalTimeInterval": {
+          "startTime": "2026-03-08T01:29:00Z",
+          "endTime": "2026-03-08T01:34:00Z"
+        },
+        "civilDateTimeInterval": {
+          "startDateTime": {
+            "date": {
+              "year": 2026,
+              "month": 3,
+              "day": 7
+            },
+            "time": {
+              "hours": 17,
+              "minutes": 29
+            }
+          },
+          "endDateTime": {
+            "date": {
+              "year": 2026,
+              "month": 3,
+              "day": 7
+            },
+            "time": {
+              "hours": 17,
+              "minutes": 34
+            }
+          }
+        },
+        "civilIso8601TimeInterval": {
+          "startTime": "2026-03-07T17:29:00",
+          "endTime": "2026-03-07T17:34:00"
+        }
+      }
+    ]
+  }
+}
